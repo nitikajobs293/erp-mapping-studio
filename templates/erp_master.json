@@ -1,0 +1,122 @@
+{
+  "_comment": "ERP master list. Edit here or in the app (ERP Master page). Conventions are only applied to columns that exist in supplied metadata; they never create tables or joins.",
+  "erps": [
+    {
+      "name": "SAP S/4HANA",
+      "aliases": ["SAP NSAP", "S4HANA", "S/4HANA"],
+      "vendor": "SAP",
+      "category": "ERP",
+      "description": "SAP S/4HANA (NSAP). Transparent tables replicated to Snowflake.",
+      "date_format": "SAP_DATS",
+      "null_date_values": ["00000000"],
+      "client_column": "MANDT",
+      "change_column_candidates": ["AEDAT", "LAEDA", "ERDAT"],
+      "leading_zero_columns": ["MATNR", "VBELN", "KUNNR", "LIFNR", "TKNUM"],
+      "active": true
+    },
+    {
+      "name": "SAP ECC",
+      "aliases": ["ECC"],
+      "vendor": "SAP",
+      "category": "ERP",
+      "description": "SAP ECC 6.0.",
+      "date_format": "SAP_DATS",
+      "null_date_values": ["00000000"],
+      "client_column": "MANDT",
+      "change_column_candidates": ["AEDAT", "LAEDA", "ERDAT"],
+      "leading_zero_columns": ["MATNR", "VBELN", "KUNNR", "LIFNR", "TKNUM"],
+      "active": true
+    },
+    {
+      "name": "SAP EBS",
+      "aliases": ["EBS"],
+      "vendor": "",
+      "category": "ERP",
+      "description": "Listed as 'SAP EBS' in the requirements. Conventions not configured - supply metadata.",
+      "date_format": "ISO",
+      "null_date_values": [],
+      "client_column": "",
+      "change_column_candidates": [],
+      "leading_zero_columns": [],
+      "active": true
+    },
+    {
+      "name": "iScala",
+      "aliases": ["Epicor iScala"],
+      "vendor": "Epicor",
+      "category": "ERP",
+      "description": "Epicor iScala. Conventions not configured - supply metadata.",
+      "date_format": "ISO",
+      "null_date_values": [],
+      "client_column": "",
+      "change_column_candidates": [],
+      "leading_zero_columns": [],
+      "active": true
+    },
+    {
+      "name": "JD Edwards",
+      "aliases": ["JDE", "JD Edwards EnterpriseOne"],
+      "vendor": "Oracle",
+      "category": "ERP",
+      "description": "JD Edwards EnterpriseOne / World. Dates commonly stored as CYYDDD Julian numbers.",
+      "date_format": "JDE_JULIAN",
+      "null_date_values": ["0"],
+      "client_column": "",
+      "change_column_candidates": [],
+      "leading_zero_columns": [],
+      "active": true
+    },
+    {
+      "name": "SYSPRO",
+      "aliases": [],
+      "vendor": "SYSPRO",
+      "category": "ERP",
+      "description": "SYSPRO ERP. Conventions not configured - supply metadata.",
+      "date_format": "ISO",
+      "null_date_values": [],
+      "client_column": "",
+      "change_column_candidates": [],
+      "leading_zero_columns": [],
+      "active": true
+    },
+    {
+      "name": "Blue Yonder",
+      "aliases": ["JDA"],
+      "vendor": "Blue Yonder",
+      "category": "Supply Chain / WMS",
+      "description": "Blue Yonder supply chain / WMS. Conventions not configured - supply metadata.",
+      "date_format": "ISO",
+      "null_date_values": [],
+      "client_column": "",
+      "change_column_candidates": [],
+      "leading_zero_columns": [],
+      "active": true
+    },
+    {
+      "name": "Körber",
+      "aliases": ["Korber", "HighJump"],
+      "vendor": "Körber",
+      "category": "WMS",
+      "description": "Körber warehouse management. Conventions not configured - supply metadata.",
+      "date_format": "ISO",
+      "null_date_values": [],
+      "client_column": "",
+      "change_column_candidates": [],
+      "leading_zero_columns": [],
+      "active": true
+    },
+    {
+      "name": "GT Nexus",
+      "aliases": ["Infor Nexus"],
+      "vendor": "Infor",
+      "category": "Supply Chain Network",
+      "description": "GT Nexus / Infor Nexus. Conventions not configured - supply metadata.",
+      "date_format": "ISO",
+      "null_date_values": [],
+      "client_column": "",
+      "change_column_candidates": [],
+      "leading_zero_columns": [],
+      "active": true
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+Target Column,Target Data Type,Business Definition,Mandatory,Expected Transformation,Business Rules,Source Hint
+DELIVERY_NUMBER,VARCHAR(10),Outbound delivery document number,Y,Strip leading zeros,,LIPS.VBELN
+DELIVERY_ITEM,NUMBER(6),Delivery line item number,Y,Cast to number,,LIPS.POSNR
+DELIVERY_TYPE,VARCHAR(4),Delivery document type,N,,,
+SALES_ORGANIZATION,VARCHAR(4),Sales organization responsible for the delivery,Y,,,
+SHIPPING_POINT,VARCHAR(4),Shipping point,N,,,
+MATERIAL_NUMBER,VARCHAR(40),Material number,Y,Strip leading zeros,,
+PLANT,VARCHAR(4),Delivering plant,Y,,,
+PLANT_NAME,VARCHAR(30),Plant name,N,,,
+STORAGE_LOCATION,VARCHAR(4),Storage location,N,,,
+MOVEMENT_TYPE,VARCHAR(3),Inventory movement type,N,,,
+DELIVERED_QUANTITY,"NUMBER(15,3)",Actual quantity delivered in sales units,Y,,Must be >= 0,
+SALES_UNIT,VARCHAR(3),Sales unit of measure of the delivered quantity,N,,,
+DELIVERY_DATE,DATE,Planned delivery date,N,,,
+GOODS_ISSUE_DATE,DATE,Actual goods movement (goods issue) date,N,,Must not be earlier than the delivery creation date,
+SHIPMENT_NUMBER,VARCHAR(10),Shipment number the delivery is assigned to,N,Strip leading zeros,,VTTP.TKNUM
+SHIPMENT_TYPE,VARCHAR(4),Shipment type,N,,,
+SHIPMENT_START_DATE,DATE,Actual shipment start date,N,,,
+CARRIER_ID,VARCHAR(10),Carrier / forwarding agent number,N,Strip leading zeros,,
+TRACKING_NUMBER,VARCHAR(35),Carrier tracking number,N,,,
+LAST_CHANGED_DATE,DATE,Latest change date of the delivery item or header,N,First non-null of item then header change date,,LIPS.AEDAT;LIKP.AEDAT
+SOURCE_SYSTEM,VARCHAR(10),Source system code,Y,Constant 'S4H',,

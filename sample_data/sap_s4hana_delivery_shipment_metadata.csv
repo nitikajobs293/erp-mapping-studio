@@ -1,0 +1,44 @@
+ERP Name,Schema Name,Table Name,Table Description,Column Name,Data Type,Column Description,Primary Key,Foreign Key,References,Business Description
+SAP S/4HANA,SAP_S4,LIKP,SD Document: Delivery Header Data,MANDT,CLNT(3),Client,Y,N,,SAP client
+SAP S/4HANA,SAP_S4,LIKP,SD Document: Delivery Header Data,VBELN,CHAR(10),Delivery,Y,N,,Outbound delivery document number
+SAP S/4HANA,SAP_S4,LIKP,SD Document: Delivery Header Data,LFART,CHAR(4),Delivery Type,N,N,,Delivery document type
+SAP S/4HANA,SAP_S4,LIKP,SD Document: Delivery Header Data,VKORG,CHAR(4),Sales Organization,N,N,,
+SAP S/4HANA,SAP_S4,LIKP,SD Document: Delivery Header Data,VSTEL,CHAR(4),Shipping Point/Receiving Point,N,N,,
+SAP S/4HANA,SAP_S4,LIKP,SD Document: Delivery Header Data,KUNNR,CHAR(10),Ship-to party,N,N,,Customer receiving the goods
+SAP S/4HANA,SAP_S4,LIKP,SD Document: Delivery Header Data,LFDAT,DATS(8),Delivery Date,N,N,,Planned delivery date
+SAP S/4HANA,SAP_S4,LIKP,SD Document: Delivery Header Data,WADAT_IST,DATS(8),Actual Goods Movement Date,N,N,,Actual goods issue date
+SAP S/4HANA,SAP_S4,LIKP,SD Document: Delivery Header Data,BTGEW,QUAN(15),Total Weight,N,N,,
+SAP S/4HANA,SAP_S4,LIKP,SD Document: Delivery Header Data,ERDAT,DATS(8),Date on Which Record Was Created,N,N,,
+SAP S/4HANA,SAP_S4,LIKP,SD Document: Delivery Header Data,AEDAT,DATS(8),Date of Last Change,N,N,,
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,MANDT,CLNT(3),Client,Y,Y,LIKP.MANDT,SAP client
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,VBELN,CHAR(10),Delivery,Y,Y,LIKP.VBELN,Outbound delivery document number
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,POSNR,NUMC(6),Delivery Item,Y,N,,Delivery line item number
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,MATNR,CHAR(40),Material Number,N,N,,
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,WERKS,CHAR(4),Plant,N,N,,Delivering plant
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,LGORT,CHAR(4),Storage Location,N,N,,
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,LFIMG,QUAN(13),Actual quantity delivered (in sales units),N,N,,Delivered quantity
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,VRKME,UNIT(3),Sales unit,N,N,,Unit of the delivered quantity
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,MEINS,UNIT(3),Base Unit of Measure,N,N,,
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,BWART,CHAR(3),Movement Type (Inventory Management),N,N,,
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,VGBEL,CHAR(10),Document number of the reference document,N,N,,Typically the sales order number
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,VGPOS,NUMC(6),Item number of the reference item,N,N,,
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,ERDAT,DATS(8),Date on Which Record Was Created,N,N,,
+SAP S/4HANA,SAP_S4,LIPS,SD document: Delivery: Item data,AEDAT,DATS(8),Date of Last Change,N,N,,
+SAP S/4HANA,SAP_S4,VTTK,Shipment Header,MANDT,CLNT(3),Client,Y,N,,SAP client
+SAP S/4HANA,SAP_S4,VTTK,Shipment Header,TKNUM,CHAR(10),Shipment Number,Y,N,,
+SAP S/4HANA,SAP_S4,VTTK,Shipment Header,SHTYP,CHAR(4),Shipment Type,N,N,,
+SAP S/4HANA,SAP_S4,VTTK,Shipment Header,TPLST,CHAR(4),Transportation Planning Point,N,N,,
+SAP S/4HANA,SAP_S4,VTTK,Shipment Header,TDLNR,CHAR(10),Number of Forwarding Agent,N,N,,Carrier / forwarding agent
+SAP S/4HANA,SAP_S4,VTTK,Shipment Header,DATBG,DATS(8),Current Date for Start of Shipment,N,N,,Actual shipment start date
+SAP S/4HANA,SAP_S4,VTTK,Shipment Header,STTRG,CHAR(1),Overall Transportation Status,N,N,,
+SAP S/4HANA,SAP_S4,VTTK,Shipment Header,ERDAT,DATS(8),Date on Which Record Was Created,N,N,,
+SAP S/4HANA,SAP_S4,VTTK,Shipment Header,AEDAT,DATS(8),Date of Last Change,N,N,,
+SAP S/4HANA,SAP_S4,VTTP,Shipment Item,MANDT,CLNT(3),Client,Y,Y,LIKP.MANDT;VTTK.MANDT,SAP client
+SAP S/4HANA,SAP_S4,VTTP,Shipment Item,TKNUM,CHAR(10),Shipment Number,Y,Y,VTTK.TKNUM,
+SAP S/4HANA,SAP_S4,VTTP,Shipment Item,TPNUM,NUMC(4),Shipment Item,Y,N,,
+SAP S/4HANA,SAP_S4,VTTP,Shipment Item,VBELN,CHAR(10),Delivery,N,Y,LIKP.VBELN,Delivery assigned to the shipment
+SAP S/4HANA,SAP_S4,VTTP,Shipment Item,ERDAT,DATS(8),Date on Which Record Was Created,N,N,,
+SAP S/4HANA,SAP_S4,T001W,Plants/Branches,MANDT,CLNT(3),Client,Y,N,,SAP client
+SAP S/4HANA,SAP_S4,T001W,Plants/Branches,WERKS,CHAR(4),Plant,Y,N,,
+SAP S/4HANA,SAP_S4,T001W,Plants/Branches,NAME1,CHAR(30),Name,N,N,,Plant name
+SAP S/4HANA,SAP_S4,T001W,Plants/Branches,LAND1,CHAR(3),Country Key,N,N,,Plant country

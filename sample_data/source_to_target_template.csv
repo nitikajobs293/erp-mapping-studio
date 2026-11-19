@@ -1,0 +1,3 @@
+Target Column,Target Data Type,Business Definition,Mandatory,Source Table,Source Column,Expected Transformation,Business Rules
+DELIVERY_NUMBER,VARCHAR(10),Outbound delivery number,Y,LIPS,VBELN,Strip leading zeros,
+DELIVERED_QUANTITY,"NUMBER(15,3)",Delivered quantity,Y,LIPS,LFIMG,,Must be >= 0
