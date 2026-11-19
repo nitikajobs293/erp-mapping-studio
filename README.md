@@ -30,7 +30,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt          # needs the Graphviz binary: apt install graphviz / brew install graphviz
 cp .env.example .env                     # set DATABASE_URL (PostgreSQL or sqlite:///./erpdm.db) and admin creds
 python scripts/init_db.py                # Alembic migrations + FTS indexes + admin + sample metadata
-streamlit run app.py
+streamlit run app.py                     # run from this folder so .streamlit/config.toml (theme) is picked up
 ```
 
 On start-up, the app creates the first administrator from `ADMIN_USERNAME` / `ADMIN_PASSWORD`. In

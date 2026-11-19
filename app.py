@@ -26,8 +26,9 @@ st.markdown("""
 <style>
   .block-container {padding-top: 1.6rem; max-width: 1500px;}
   [data-testid="stMetricValue"] {font-size: 1.6rem;}
-  [data-testid="stSidebar"] {background: #f5f7fa;}
-  .small-muted {color:#6b7280; font-size:0.85rem;}
+  /* Theme-neutral: inherit the active theme's text colour, only soften it, so labels stay readable in
+     light and dark mode alike. Colours themselves come from .streamlit/config.toml. */
+  .small-muted {opacity: 0.85; font-size: 0.88rem;}
 </style>""", unsafe_allow_html=True)
 
 
@@ -129,7 +130,7 @@ def sidebar() -> str:
         st.divider()
         st.caption("Workflow progress")
         for label, done in w.steps():
-            st.markdown(f"{'✅' if done else '▫️'} <span class='small-muted'>{label}</span>", unsafe_allow_html=True)
+            st.markdown(f"{'✅' if done else '⬜'} <span class='small-muted'>{label}</span>", unsafe_allow_html=True)
         if st.button("Reset workflow", width="stretch"):
             code = w.erp_code
             st.session_state["wf"] = type(w)(erp_code=code)
