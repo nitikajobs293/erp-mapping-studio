@@ -1,0 +1,138 @@
+erp:
+  id: sap_ecc
+  name: SAP ECC
+  inherits: sap_common
+  vendor: SAP
+  family: SAP
+  versions: ["ECC 6.0 EhP7", "ECC 6.0 EhP8", "ECC 6.0 (other EhP)"]
+  storage: relational
+  aliases: [ecc, sap ecc, r/3, r3, ecc6]
+  notes: >
+    ECC keeps SD statuses in VBUK (header) / VBUP (item) and goods movements in MKPF (header) / MSEG (item).
+    Material number length is 18 characters (40 in S/4HANA).
+
+tables:
+  VBUK:
+    description: Sales Document Header Status
+    module: SD
+    primary_key: [MANDT, VBELN]
+    confidence: standard
+    role: Header statuses for orders, deliveries and invoices (one row per SD document).
+    fields:
+      VBELN: {description: SD document number, type: CHAR(10)}
+      GBSTK: {description: Overall processing status, type: CHAR(1)}
+      LFSTK: {description: Delivery status, type: CHAR(1)}
+      KOSTK: {description: Overall picking status, type: CHAR(1)}
+      PKSTK: {description: Packing status, type: CHAR(1)}
+      WBSTK: {description: Total goods movement status, type: CHAR(1)}
+      ABSTK: {description: Rejection status, type: CHAR(1)}
+  VBUP:
+    description: Sales Document Item Status
+    module: SD
+    primary_key: [MANDT, VBELN, POSNR]
+    confidence: standard
+    role: Item-level statuses for SD documents.
+    fields:
+      VBELN: {description: SD document number, type: CHAR(10)}
+      POSNR: {description: Item, type: NUMC(6)}
+      GBSTA: {description: Overall processing status, type: CHAR(1)}
+      LFSTA: {description: Delivery status, type: CHAR(1)}
+      KOSTA: {description: Picking status, type: CHAR(1)}
+      PKSTA: {description: Packing status, type: CHAR(1)}
+      WBSTA: {description: Goods movement status, type: CHAR(1)}
+      ABSTA: {description: Rejection status, type: CHAR(1)}
+  MKPF:
+    description: Material Document Header
+    module: MM-IM
+    primary_key: [MANDT, MBLNR, MJAHR]
+    confidence: standard
+    role: Goods movement header - posting date, document date.
+    fields:
+      MBLNR: {description: Material document, type: CHAR(10)}
+      MJAHR: {description: Material document year, type: NUMC(4)}
+      BUDAT: {description: Posting date, type: DATS}
+      BLDAT: {description: Document date, type: DATS}
+      CPUDT: {description: Entry date, type: DATS}
+      XBLNR: {description: Reference document, type: CHAR(16)}
+  MSEG:
+    description: Material Document Segment (item)
+    module: MM-IM
+    primary_key: [MANDT, MBLNR, MJAHR, ZEILE]
+    confidence: standard
+    role: Goods movement line - material, plant, movement type, quantity.
+    fields:
+      MBLNR: {description: Material document, type: CHAR(10)}
+      MJAHR: {description: Material document year, type: NUMC(4)}
+      ZEILE: {description: Item, type: NUMC(4)}
+      BWART: {description: Movement type, type: CHAR(3)}
+      MATNR: {description: Material, type: CHAR(18)}
+      WERKS: {description: Plant, type: CHAR(4)}
+      LGORT: {description: Storage location, type: CHAR(4)}
+      CHARG: {description: Batch, type: CHAR(10)}
+      MENGE: {description: Quantity, type: QUAN}
+      MEINS: {description: Base unit, type: UNIT}
+      SHKZG: {description: Debit/credit indicator (S = receipt, H = issue), type: CHAR(1)}
+      KUNNR: {description: Customer, type: CHAR(10)}
+      LIFNR: {description: Vendor, type: CHAR(10)}
+      EBELN: {description: Purchase order, type: CHAR(10)}
+      EBELP: {description: PO item, type: NUMC(5)}
+      AUFNR: {description: Production order, type: CHAR(12)}
+      VBELN_IM: {description: Delivery, type: CHAR(10)}
+      VBELP_IM: {description: Delivery item, type: NUMC(6)}
+      SMBLN: {description: Reversed material document, type: CHAR(10)}
+
+relationships:
+  - {from: VBAK, to: VBUK, on: [[VBELN, VBELN]], cardinality: "1:1", confidence: standard}
+  - {from: VBAP, to: VBUP, on: [[VBELN, VBELN], [POSNR, POSNR]], cardinality: "1:1", confidence: standard}
+  - {from: LIKP, to: VBUK, on: [[VBELN, VBELN]], cardinality: "1:1", confidence: standard, label: "delivery header status"}
+  - {from: LIPS, to: VBUP, on: [[VBELN, VBELN], [POSNR, POSNR]], cardinality: "1:1", confidence: standard, label: "delivery item status"}
+  - {from: MKPF, to: MSEG, on: [[MBLNR, MBLNR], [MJAHR, MJAHR]], cardinality: "1:N", confidence: standard}
+  - {from: MSEG, to: MAKT, on: [[MATNR, MATNR]], cardinality: "N:1", confidence: standard, filter: "{MAKT}.SPRAS = 'E'"}
+  - {from: MSEG, to: T001W, on: [[WERKS, WERKS]], cardinality: "N:1", confidence: standard}
+  - {from: LIPS, to: MSEG, on: [[VBELN, VBELN_IM], [POSNR, VBELP_IM]], cardinality: "1:N", confidence: inferred, label: "goods issue for delivery item"}
+  - {from: SER03, to: MSEG, on: [[MBLNR, MBLNR], [MJAHR, MJAHR], [ZEILE, ZEILE]], cardinality: "1:1", confidence: standard}
+
+concepts:
+  order_status:       {table: VBUK, field: GBSTK, confidence: standard, note: "Join VBUK on the sales order number"}
+  picking_status:     {table: VBUK, field: KOSTK, confidence: standard}
+  packing_status:     {table: VBUK, field: PKSTK, confidence: standard}
+  goods_issue_status: {table: VBUK, field: WBSTK, confidence: standard}
+  material_document:  {table: MSEG, field: MBLNR, confidence: standard}
+  movement_type:      {table: MSEG, field: BWART, confidence: standard}
+  movement_date:      {table: MKPF, field: BUDAT, confidence: standard}
+  movement_quantity:  {expr: "CASE WHEN {MSEG.SHKZG} = 'H' THEN -{MSEG.MENGE} ELSE {MSEG.MENGE} END", confidence: standard, note: "Signed by debit/credit indicator"}
+
+business_objects:
+  inventory_movement:
+    anchor: MSEG
+    header: MKPF
+    grain: One row per material document item (MBLNR + MJAHR + ZEILE)
+    model_type: Transaction fact (event history)
+    business_key: [MBLNR, MJAHR, ZEILE]
+    tables: [MKPF, MSEG, MAKT, T001W]
+    field_overrides:
+      material: {table: MSEG, field: MATNR}
+      plant: {table: MSEG, field: WERKS}
+      storage_location: {table: MSEG, field: LGORT}
+      batch: {table: MSEG, field: CHARG}
+      delivery_number: {table: MSEG, field: VBELN_IM}
+      purchase_order: {table: MSEG, field: EBELN}
+      production_order: {table: MSEG, field: AUFNR}
+    duplicate_risks: ["Reversal documents (SMBLN) are separate rows - net them, do not drop."]
+  delivery:
+    anchor: LIPS
+    header: LIKP
+    field_overrides:
+      goods_issue_status: {table: VBUP, field: WBSTA, note: "Item-level goods movement status (VBUP)"}
+      picking_status: {table: VBUP, field: KOSTA}
+      packing_status: {table: VBUP, field: PKSTA}
+
+transactions:
+  MB51:
+    tables: [MKPF, MSEG, MAKT, T001W]
+    notes: "ECC: MB51 reads MKPF/MSEG."
+  MIGO:
+    description: Goods Movement
+    type: standard
+    business_object: inventory_movement
+    tables: [MKPF, MSEG, EKPO, LIPS]

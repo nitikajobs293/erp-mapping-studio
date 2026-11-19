@@ -1,0 +1,341 @@
+erp:
+  id: syspro
+  name: SYSPRO
+  vendor: SYSPRO
+  family: SYSPRO
+  versions: ["SYSPRO 8", "SYSPRO 7"]
+  storage: relational
+  aliases: [syspro, syspro 8]
+  date_type: DATE
+  notes: >
+    SYSPRO runs on SQL Server; one database per company (e.g. SysproCompanyA). Stock-related
+    sales order line columns are prefixed M (merchandise) e.g. MStockCode, MOrderQty. LineType distinguishes
+    stocked (1), freight (4), miscellaneous charge (5), comment (6) and non-stocked (7) lines - always filter.
+    OrderStatus codes (validate in your system): 1 open, 2 open back order, 3 released back order,
+    4 in warehouse, 8 to invoice, 9 complete, \ cancelled, S suspense, F forward order.
+    Dispatch notes (MdnMaster/MdnDetail) are used when the dispatch-note module is enabled.
+  source_refs:
+    - "SYSPRO data dictionary / SYSPRO table documentation (validate per release)"
+
+tables:
+  SorMaster:
+    description: Sales Order Header
+    module: Sales Orders
+    primary_key: [SalesOrder]
+    confidence: standard
+    role: Sales order header - customer, status, dates, ship address.
+    fields:
+      SalesOrder: {description: Sales order number, type: VARCHAR(20)}
+      OrderStatus: {description: Order status, type: CHAR(1)}
+      Customer: {description: Customer, type: VARCHAR(15)}
+      CustomerName: {description: Customer name, type: VARCHAR(50)}
+      CustomerPoNumber: {description: Customer PO, type: VARCHAR(30)}
+      OrderDate: {description: Order date, type: DATETIME}
+      ReqShipDate: {description: Requested ship date, type: DATETIME}
+      Warehouse: {description: Default warehouse, type: VARCHAR(10)}
+      Branch: {description: Branch, type: VARCHAR(10)}
+      Salesperson: {description: Salesperson, type: VARCHAR(20)}
+      ShippingInstrs: {description: Shipping instructions / ship via, type: VARCHAR(50)}
+      Currency: {description: Currency, type: VARCHAR(3)}
+      CancelledFlag: {description: Cancelled flag, type: CHAR(1)}
+      LastInvoice: {description: Last invoice, type: VARCHAR(20)}
+      ActualDeliveryDate: {description: Actual delivery date, type: DATETIME}
+  SorDetail:
+    description: Sales Order Detail (lines)
+    module: Sales Orders
+    primary_key: [SalesOrder, SalesOrderLine]
+    confidence: standard
+    role: Sales order lines incl. stock, freight, misc and comment lines.
+    fields:
+      SalesOrder: {description: Sales order, type: VARCHAR(20)}
+      SalesOrderLine: {description: Line number, type: DECIMAL}
+      LineType: {description: "1 stock, 4 freight, 5 misc charge, 6 comment, 7 non-stock", type: CHAR(1)}
+      MStockCode: {description: Stock code, type: VARCHAR(30)}
+      MStockDes: {description: Stock description, type: VARCHAR(50)}
+      MWarehouse: {description: Warehouse, type: VARCHAR(10)}
+      MOrderQty: {description: Order quantity, type: DECIMAL}
+      MShipQty: {description: Quantity to ship (current), type: DECIMAL}
+      MBackOrderQty: {description: Back order quantity, type: DECIMAL}
+      MQtyDispatched: {description: Quantity dispatched (dispatch notes), type: DECIMAL}
+      MOrderUom: {description: Order UoM, type: VARCHAR(10)}
+      MPrice: {description: Unit price, type: DECIMAL}
+      MLineShipDate: {description: Line ship date, type: DATETIME}
+      MReviewFlag: {description: Review flag, type: CHAR(1)}
+  MdnMaster:
+    description: Dispatch Note Header
+    module: Sales Orders - Dispatch Notes
+    primary_key: [DispatchNote]
+    confidence: inferred
+    role: Dispatch note (delivery) header - links to sales order.
+    notes: "Only populated if dispatch notes are used. Validate column names."
+    fields:
+      DispatchNote: {description: Dispatch note number, type: VARCHAR(20)}
+      SalesOrder: {description: Sales order, type: VARCHAR(20)}
+      DispatchNoteStatus: {description: Status, type: CHAR(1)}
+      Customer: {description: Customer, type: VARCHAR(15)}
+      ShipDate: {description: Ship date, type: DATETIME}
+      ShippingInstrs: {description: Ship via, type: VARCHAR(50)}
+      WaybillNumber: {description: Waybill / tracking, type: VARCHAR(30)}
+  MdnDetail:
+    description: Dispatch Note Detail
+    module: Sales Orders - Dispatch Notes
+    primary_key: [DispatchNote, DispatchNoteLine]
+    confidence: inferred
+    role: Dispatch note lines referencing sales order lines.
+    fields:
+      DispatchNote: {description: Dispatch note, type: VARCHAR(20)}
+      DispatchNoteLine: {description: Line, type: DECIMAL}
+      SalesOrder: {description: Sales order, type: VARCHAR(20)}
+      SalesOrderLine: {description: Sales order line, type: DECIMAL}
+      MStockCode: {description: Stock code, type: VARCHAR(30)}
+      MQtyToDispatch: {description: Quantity dispatched, type: DECIMAL}
+      MWarehouse: {description: Warehouse, type: VARCHAR(10)}
+  InvMaster:
+    description: Inventory Master
+    module: Inventory
+    primary_key: [StockCode]
+    confidence: standard
+    role: Stock item master.
+    fields:
+      StockCode: {description: Stock code, type: VARCHAR(30)}
+      Description: {description: Description, type: VARCHAR(50)}
+      StockUom: {description: Stocking UoM, type: VARCHAR(10)}
+      ProductClass: {description: Product class, type: VARCHAR(20)}
+      SerialMethod: {description: Serial tracking method, type: CHAR(1)}
+  InvWarehouse:
+    description: Inventory per Warehouse
+    module: Inventory
+    primary_key: [StockCode, Warehouse]
+    confidence: standard
+    role: Stock balances per item and warehouse.
+    fields:
+      StockCode: {description: Stock code, type: VARCHAR(30)}
+      Warehouse: {description: Warehouse, type: VARCHAR(10)}
+      QtyOnHand: {description: Quantity on hand, type: DECIMAL}
+      QtyAllocated: {description: Allocated to sales orders, type: DECIMAL}
+      QtyOnOrder: {description: On purchase order, type: DECIMAL}
+      QtyInTransit: {description: In transit, type: DECIMAL}
+      QtyOnBackOrder: {description: On back order, type: DECIMAL}
+  InvMovements:
+    description: Inventory Movements
+    module: Inventory
+    primary_key: [StockCode, Warehouse, TrnYear, TrnMonth, EntryDate, MovementType, TrnTime]
+    confidence: validate
+    role: Inventory transaction history. Primary key composition varies by release - validate.
+    fields:
+      StockCode: {description: Stock code, type: VARCHAR(30)}
+      Warehouse: {description: Warehouse, type: VARCHAR(10)}
+      EntryDate: {description: Entry date, type: DATETIME}
+      MovementType: {description: "I inventory, S sales", type: CHAR(1)}
+      TrnType: {description: Transaction type, type: CHAR(1)}
+      TrnQty: {description: Quantity, type: DECIMAL}
+      SalesOrder: {description: Sales order (sales movements), type: VARCHAR(20)}
+      Reference: {description: Reference, type: VARCHAR(30)}
+  InvSerialHead:
+    description: Serial Number Header
+    module: Inventory - Serials
+    primary_key: [StockCode, Serial]
+    confidence: validate
+    role: Serial number master per stock code (validate table name in your release; InvSerialHead / InvSerialTrn).
+    fields:
+      StockCode: {description: Stock code, type: VARCHAR(30)}
+      Serial: {description: Serial number, type: VARCHAR(50)}
+      Warehouse: {description: Warehouse, type: VARCHAR(10)}
+      Customer: {description: Customer sold to, type: VARCHAR(15)}
+  ArCustomer:
+    description: Customer Master
+    module: Accounts Receivable
+    primary_key: [Customer]
+    confidence: standard
+    role: Customer master.
+    fields:
+      Customer: {description: Customer, type: VARCHAR(15)}
+      Name: {description: Name, type: VARCHAR(50)}
+      Branch: {description: Branch, type: VARCHAR(10)}
+  PorMasterHdr:
+    description: Purchase Order Header
+    module: Purchase Orders
+    primary_key: [PurchaseOrder]
+    confidence: standard
+    role: PO header.
+    fields:
+      PurchaseOrder: {description: PO number, type: VARCHAR(20)}
+      Supplier: {description: Supplier, type: VARCHAR(15)}
+      OrderEntryDate: {description: Order date, type: DATETIME}
+      OrderStatus: {description: Status, type: CHAR(1)}
+  PorMasterDetail:
+    description: Purchase Order Detail
+    module: Purchase Orders
+    primary_key: [PurchaseOrder, Line]
+    confidence: standard
+    role: PO lines.
+    fields:
+      PurchaseOrder: {description: PO, type: VARCHAR(20)}
+      Line: {description: Line, type: DECIMAL}
+      MStockCode: {description: Stock code, type: VARCHAR(30)}
+      MWarehouse: {description: Warehouse, type: VARCHAR(10)}
+      MOrderQty: {description: Order qty, type: DECIMAL}
+      MReceivedQty: {description: Received qty, type: DECIMAL}
+      MLatestDueDate: {description: Due date, type: DATETIME}
+  WipMaster:
+    description: Work in Progress (Job) Master
+    module: WIP
+    primary_key: [Job]
+    confidence: standard
+    role: Job / work order header.
+    fields:
+      Job: {description: Job number, type: VARCHAR(20)}
+      StockCode: {description: Item to make, type: VARCHAR(30)}
+      Warehouse: {description: Warehouse, type: VARCHAR(10)}
+      QtyToMake: {description: Quantity to make, type: DECIMAL}
+      QtyManufactured: {description: Quantity manufactured, type: DECIMAL}
+      Complete: {description: Complete flag, type: CHAR(1)}
+
+relationships:
+  - {from: SorMaster, to: SorDetail, on: [[SalesOrder, SalesOrder]], cardinality: "1:N", confidence: standard}
+  - {from: SorMaster, to: ArCustomer, on: [[Customer, Customer]], cardinality: "N:1", confidence: standard}
+  - {from: SorDetail, to: InvMaster, on: [[MStockCode, StockCode]], cardinality: "N:1", confidence: standard}
+  - {from: SorDetail, to: MdnDetail, on: [[SalesOrder, SalesOrder], [SalesOrderLine, SalesOrderLine]], cardinality: "1:N", confidence: inferred}
+  - {from: MdnMaster, to: MdnDetail, on: [[DispatchNote, DispatchNote]], cardinality: "1:N", confidence: inferred}
+  - {from: InvWarehouse, to: InvMaster, on: [[StockCode, StockCode]], cardinality: "N:1", confidence: standard}
+  - {from: InvMovements, to: InvMaster, on: [[StockCode, StockCode]], cardinality: "N:1", confidence: standard}
+  - {from: InvSerialHead, to: InvMaster, on: [[StockCode, StockCode]], cardinality: "N:1", confidence: validate}
+  - {from: PorMasterHdr, to: PorMasterDetail, on: [[PurchaseOrder, PurchaseOrder]], cardinality: "1:N", confidence: standard}
+  - {from: WipMaster, to: InvMaster, on: [[StockCode, StockCode]], cardinality: "N:1", confidence: standard}
+
+concepts:
+  sales_order_number:   {table: SorMaster, field: SalesOrder, confidence: standard}
+  sales_order_item:     {table: SorDetail, field: SalesOrderLine, confidence: standard}
+  order_date:           {table: SorMaster, field: OrderDate, confidence: standard}
+  customer:             {table: SorMaster, field: Customer, confidence: standard}
+  customer_name:        {table: SorMaster, field: CustomerName, confidence: standard}
+  ship_to:              {table: SorMaster, field: Customer, confidence: validate, note: "Ship-to address is stored as address lines on SorMaster (ShipAddress1..); multiple ship-to codes use ArMultAddress"}
+  sales_org:            {table: SorMaster, field: Branch, confidence: inferred}
+  material:             {table: SorDetail, field: MStockCode, confidence: standard}
+  material_description: {table: SorDetail, field: MStockDes, confidence: standard}
+  order_quantity:       {table: SorDetail, field: MOrderQty, confidence: standard}
+  open_quantity:        {expr: "{SorDetail.MBackOrderQty} + {SorDetail.MShipQty}", confidence: inferred, note: "Outstanding = ship qty not yet invoiced + back order qty; validate against your invoicing process"}
+  shipped_quantity:     {table: SorDetail, field: MQtyDispatched, confidence: validate, note: "Only populated with dispatch notes; otherwise derive from invoiced quantity (ArTrnDetail)"}
+  sales_uom:            {table: SorDetail, field: MOrderUom, confidence: standard}
+  requested_delivery_date: {table: SorMaster, field: ReqShipDate, confidence: standard, alternatives: ["SorDetail.MLineShipDate for line level"]}
+  order_status:         {table: SorMaster, field: OrderStatus, confidence: standard}
+  rejection_reason:     {table: SorMaster, field: CancelledFlag, confidence: validate, note: "Cancel reason codes are kept in SorCancelled / audit tables - validate"}
+  net_value:            {expr: "{SorDetail.MOrderQty} * {SorDetail.MPrice}", confidence: inferred, note: "Before discounts - discount columns MDiscPct1..3 apply"}
+  currency:             {table: SorMaster, field: Currency, confidence: standard}
+  plant:                {table: SorDetail, field: MWarehouse, confidence: inferred, note: "SYSPRO uses warehouse rather than plant"}
+  warehouse:            {table: SorDetail, field: MWarehouse, confidence: standard}
+  delivery_number:      {table: MdnMaster, field: DispatchNote, confidence: inferred}
+  delivery_item:        {table: MdnDetail, field: DispatchNoteLine, confidence: inferred}
+  delivery_quantity:    {table: MdnDetail, field: MQtyToDispatch, confidence: inferred}
+  actual_goods_issue_date: {table: MdnMaster, field: ShipDate, confidence: inferred}
+  actual_delivery_date: {table: SorMaster, field: ActualDeliveryDate, confidence: validate}
+  carrier:              {table: SorMaster, field: ShippingInstrs, confidence: inferred, note: "Ship-via code / instructions; carrier master depends on configuration"}
+  tracking_number:      {table: MdnMaster, field: WaybillNumber, confidence: validate}
+  invoice_number:       {table: SorMaster, field: LastInvoice, confidence: inferred, note: "Full invoice history in ArInvoice / ArTrnDetail"}
+  stock_unrestricted:   {table: InvWarehouse, field: QtyOnHand, confidence: standard}
+  stock_available:      {expr: "{InvWarehouse.QtyOnHand} - {InvWarehouse.QtyAllocated}", confidence: inferred}
+  serial_number:        {table: InvSerialHead, field: Serial, confidence: validate}
+  movement_type:        {table: InvMovements, field: TrnType, confidence: inferred}
+  movement_date:        {table: InvMovements, field: EntryDate, confidence: standard}
+  movement_quantity:    {table: InvMovements, field: TrnQty, confidence: standard}
+  purchase_order:       {table: PorMasterHdr, field: PurchaseOrder, confidence: standard}
+  purchase_order_item:  {table: PorMasterDetail, field: Line, confidence: standard}
+  supplier:             {table: PorMasterHdr, field: Supplier, confidence: standard}
+  gr_quantity:          {table: PorMasterDetail, field: MReceivedQty, confidence: standard}
+  production_order:     {table: WipMaster, field: Job, confidence: standard}
+  production_quantity:  {table: WipMaster, field: QtyToMake, confidence: standard}
+  production_completed_qty: {table: WipMaster, field: QtyManufactured, confidence: standard}
+
+business_objects:
+  sales_order:
+    anchor: SorDetail
+    header: SorMaster
+    grain: One row per sales order line (SalesOrder + SalesOrderLine), stock lines only
+    model_type: Header/item transaction fact
+    business_key: [SalesOrder, SalesOrderLine]
+    base_filter: "{SorDetail}.LineType IN ('1', '7')"
+    tables: [SorMaster, SorDetail, ArCustomer, InvMaster]
+    duplicate_risks: ["Freight/misc/comment lines (LineType 4/5/6) are real rows but not merchandise - filter, don't dedupe."]
+  delivery:
+    anchor: MdnDetail
+    header: MdnMaster
+    grain: One row per dispatch note line
+    model_type: Header/item transaction fact
+    business_key: [DispatchNote, DispatchNoteLine]
+    tables: [MdnMaster, MdnDetail, SorDetail, SorMaster]
+    field_overrides:
+      material: {table: MdnDetail, field: MStockCode}
+      sales_order_number: {table: MdnDetail, field: SalesOrder}
+      sales_order_item: {table: MdnDetail, field: SalesOrderLine}
+      shipped_quantity: {table: MdnDetail, field: MQtyToDispatch}
+      warehouse: {table: MdnDetail, field: MWarehouse}
+      customer: {table: MdnMaster, field: Customer}
+    duplicate_risks: []
+  shipment:
+    anchor: MdnMaster
+    grain: One row per dispatch note (SYSPRO has no separate transport shipment object)
+    model_type: Transaction fact
+    business_key: [DispatchNote]
+    tables: [MdnMaster, MdnDetail]
+    field_overrides:
+      shipment_number: {table: MdnMaster, field: DispatchNote, confidence: inferred}
+      customer: {table: MdnMaster, field: Customer}
+      sales_order_number: {table: MdnMaster, field: SalesOrder}
+    duplicate_risks: []
+  inventory:
+    anchor: InvWarehouse
+    grain: One row per stock code / warehouse
+    model_type: Periodic snapshot fact
+    business_key: [StockCode, Warehouse]
+    tables: [InvWarehouse, InvMaster]
+    field_overrides:
+      material: {table: InvWarehouse, field: StockCode}
+      material_description: {table: InvMaster, field: Description}
+      warehouse: {table: InvWarehouse, field: Warehouse}
+      plant: {table: InvWarehouse, field: Warehouse}
+    duplicate_risks: []
+  inventory_movement:
+    anchor: InvMovements
+    grain: One row per inventory movement
+    model_type: Transaction fact
+    business_key: [StockCode, Warehouse, EntryDate, TrnType]
+    tables: [InvMovements, InvMaster]
+    field_overrides:
+      material: {table: InvMovements, field: StockCode}
+      warehouse: {table: InvMovements, field: Warehouse}
+      sales_order_number: {table: InvMovements, field: SalesOrder}
+    duplicate_risks: ["Validate the true unique key in your release before deduplicating."]
+  purchase_order:
+    anchor: PorMasterDetail
+    header: PorMasterHdr
+    grain: One row per PO line
+    model_type: Header/item transaction fact
+    business_key: [PurchaseOrder, Line]
+    tables: [PorMasterHdr, PorMasterDetail]
+    field_overrides:
+      material: {table: PorMasterDetail, field: MStockCode}
+      order_quantity: {table: PorMasterDetail, field: MOrderQty}
+      warehouse: {table: PorMasterDetail, field: MWarehouse}
+    duplicate_risks: []
+  production_order:
+    anchor: WipMaster
+    grain: One row per job
+    model_type: Accumulating snapshot
+    business_key: [Job]
+    tables: [WipMaster, InvMaster]
+    field_overrides:
+      material: {table: WipMaster, field: StockCode}
+    duplicate_risks: []
+
+transactions:
+  SORTOI:
+    description: Sales Order Entry (program code)
+    type: standard
+    business_object: sales_order
+    tables: [SorMaster, SorDetail]
+    notes: "Program codes vary by release - validate."
+  "Dispatch Note Review":
+    description: Dispatch note review / maintenance
+    type: standard
+    business_object: delivery
+    tables: [MdnMaster, MdnDetail]

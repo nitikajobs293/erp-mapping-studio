@@ -1,0 +1,135 @@
+erp:
+  id: iscala
+  name: iScala (Epicor / Infor iScala)
+  vendor: Epicor
+  family: iScala
+  versions: ["iScala 3.x", "iScala 2.x"]
+  storage: customer_specific
+  aliases: [iscala, i scala, scala, epicor iscala]
+  date_type: DATE
+  physical_name_template: "{table}{company}{year}"
+  template_params: {company: "01", year: "00"}
+  notes: >
+    iScala physical table names combine a 4-character table code, a 2-digit company code and a 2-digit
+    financial-year code (e.g. OR01 + 01 + 00 = OR010100). Column names are positional (table code + 3-digit
+    sequence, e.g. OR01001), and their meaning must be confirmed from the iScala data dictionary for your
+    release. This knowledge file therefore only contains table-level knowledge; field-level mappings are
+    marked "needs validation" until you upload your iScala dictionary (CSV/Excel: table, field, description)
+    in the ERP Metadata Repository. Shipment / dispatch structures differ between installations and
+    are NOT pre-populated here.
+  source_refs:
+    - "iScala data dictionary for your release (upload it to confirm fields)"
+
+tables:
+  OR01:
+    description: Sales Order Header (table code; physical name OR01<company><year>)
+    module: Sales Order Processing
+    primary_key: []
+    confidence: inferred
+    role: Customer order header. Confirm key columns from your data dictionary.
+    fields: {}
+  OR03:
+    description: Sales Order Lines (table code)
+    module: Sales Order Processing
+    primary_key: []
+    confidence: inferred
+    role: Customer order lines - item, ordered and delivered quantities. Confirm columns.
+    fields: {}
+  SL01:
+    description: Customer Master (Sales Ledger)
+    module: Sales Ledger
+    primary_key: []
+    confidence: inferred
+    role: Customer master.
+    fields: {}
+  SC01:
+    description: Stock Item Master
+    module: Stock Control
+    primary_key: []
+    confidence: inferred
+    role: Stock items.
+    fields: {}
+  SC03:
+    description: Stock Balance per Warehouse
+    module: Stock Control
+    primary_key: []
+    confidence: inferred
+    role: Stock quantities per item and warehouse.
+    fields: {}
+  SC07:
+    description: Stock Transactions
+    module: Stock Control
+    primary_key: []
+    confidence: inferred
+    role: Stock movement history.
+    fields: {}
+  PC01:
+    description: Purchase Order Header
+    module: Purchase Control
+    primary_key: []
+    confidence: inferred
+    role: Purchase order header.
+    fields: {}
+  PC03:
+    description: Purchase Order Lines
+    module: Purchase Control
+    primary_key: []
+    confidence: inferred
+    role: Purchase order lines.
+    fields: {}
+
+relationships:
+  - {from: OR01, to: OR03, on: [], cardinality: "1:N", confidence: validate, note: "Join on order number column of both tables - confirm column names in the data dictionary"}
+  - {from: OR01, to: SL01, on: [], cardinality: "N:1", confidence: validate, note: "Join on customer code"}
+  - {from: OR03, to: SC01, on: [], cardinality: "N:1", confidence: validate, note: "Join on stock item code"}
+  - {from: SC03, to: SC01, on: [], cardinality: "N:1", confidence: validate}
+  - {from: PC01, to: PC03, on: [], cardinality: "1:N", confidence: validate}
+
+concepts:
+  sales_order_number:   {table: OR01, field: null, confidence: validate, note: "Order number column of OR01 - confirm in data dictionary"}
+  sales_order_item:     {table: OR03, field: null, confidence: validate}
+  customer:             {table: OR01, field: null, confidence: validate}
+  customer_name:        {table: SL01, field: null, confidence: validate}
+  material:             {table: OR03, field: null, confidence: validate}
+  order_quantity:       {table: OR03, field: null, confidence: validate}
+  shipped_quantity:     {table: OR03, field: null, confidence: validate, note: "Delivered quantity on the order line - confirm"}
+  requested_delivery_date: {table: OR03, field: null, confidence: validate}
+  warehouse:            {table: OR03, field: null, confidence: validate}
+  stock_unrestricted:   {table: SC03, field: null, confidence: validate}
+  movement_date:        {table: SC07, field: null, confidence: validate}
+  movement_quantity:    {table: SC07, field: null, confidence: validate}
+  purchase_order:       {table: PC01, field: null, confidence: validate}
+
+business_objects:
+  sales_order:
+    anchor: OR03
+    header: OR01
+    grain: One row per sales order line (confirm key columns)
+    model_type: Header/item transaction fact
+    business_key: []
+    tables: [OR01, OR03, SL01, SC01]
+    duplicate_risks: ["Year-specific physical tables (company+year suffix) - union the years you need and add the year as part of the key."]
+  inventory:
+    anchor: SC03
+    grain: One row per item / warehouse
+    model_type: Periodic snapshot fact
+    business_key: []
+    tables: [SC03, SC01]
+    duplicate_risks: []
+  inventory_movement:
+    anchor: SC07
+    grain: One row per stock transaction
+    model_type: Transaction fact
+    business_key: []
+    tables: [SC07, SC01]
+    duplicate_risks: []
+  purchase_order:
+    anchor: PC03
+    header: PC01
+    grain: One row per PO line
+    model_type: Header/item transaction fact
+    business_key: []
+    tables: [PC01, PC03]
+    duplicate_risks: []
+
+transactions: {}

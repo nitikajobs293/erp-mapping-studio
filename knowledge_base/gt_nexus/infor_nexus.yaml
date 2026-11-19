@@ -1,0 +1,97 @@
+erp:
+  id: infor_nexus
+  name: GT Nexus / Infor Nexus
+  vendor: Infor
+  family: Infor Nexus
+  versions: ["Infor Nexus (REST API v3.x)"]
+  storage: api
+  aliases: [gt nexus, gtnexus, infor nexus, nexus]
+  date_type: DATE
+  notes: >
+    Infor Nexus is a multi-enterprise SaaS network - there are no customer database tables. Data is accessed
+    via REST APIs / OQL queries returning JSON business objects (OrderDetail, PackingList, ShipmentStatus /
+    Shipment, Invoice) or via flat-file/EDI exports. In Snowflake these typically land as VARIANT JSON; the
+    "fields" below are JSON paths to FLATTEN. Object and attribute names vary by API version and your
+    community's configuration - all mappings need validation against your API documentation.
+  source_refs:
+    - "Infor Nexus developer portal - object type documentation (validate per API version)"
+
+tables:
+  OrderDetail:
+    description: Purchase/Order object (API, JSON)
+    module: Order
+    primary_key: [orderUid]
+    confidence: validate
+    role: PO / order object shared between buyer and supplier, with line items in an array.
+    fields:
+      orderUid: {description: Unique object id, type: VARIANT}
+      poNumber: {description: Order number, type: VARIANT}
+      orderItem: {description: Array of order lines, type: ARRAY}
+  PackingList:
+    description: Packing List object (API, JSON)
+    module: Shipping
+    primary_key: [packingListUid]
+    confidence: validate
+    role: Supplier packing list / ASN referencing orders and items.
+    fields:
+      packingListUid: {description: Unique id, type: VARIANT}
+      packingListNumber: {description: Packing list number, type: VARIANT}
+      poNumber: {description: Order reference, type: VARIANT}
+  Shipment:
+    description: Shipment / ShipmentStatus object (API, JSON)
+    module: Logistics
+    primary_key: [shipmentUid]
+    confidence: validate
+    role: Shipment with carrier, mode, milestones (events) and container/bill of lading references.
+    fields:
+      shipmentUid: {description: Unique id, type: VARIANT}
+      shipmentNumber: {description: Shipment number, type: VARIANT}
+      carrierName: {description: Carrier, type: VARIANT}
+      transportMode: {description: Mode, type: VARIANT}
+      billOfLadingNumber: {description: Bill of lading, type: VARIANT}
+      estimatedDepartureDate: {description: ETD, type: VARIANT}
+      actualDepartureDate: {description: ATD, type: VARIANT}
+      estimatedArrivalDate: {description: ETA, type: VARIANT}
+      actualArrivalDate: {description: ATA, type: VARIANT}
+      portOfLoading: {description: Origin port, type: VARIANT}
+      portOfDischarge: {description: Destination port, type: VARIANT}
+
+relationships:
+  - {from: PackingList, to: OrderDetail, on: [[poNumber, poNumber]], cardinality: "N:1", confidence: validate}
+
+concepts:
+  purchase_order:       {table: OrderDetail, field: poNumber, confidence: validate}
+  sales_order_number:   {table: OrderDetail, field: poNumber, confidence: validate, note: "Nexus is buyer-PO centric: the customer PO is the order reference"}
+  delivery_number:      {table: PackingList, field: packingListNumber, confidence: validate}
+  shipment_number:      {table: Shipment, field: shipmentNumber, confidence: validate}
+  carrier:              {table: Shipment, field: carrierName, confidence: validate}
+  transport_mode:       {table: Shipment, field: transportMode, confidence: validate}
+  tracking_number:      {table: Shipment, field: billOfLadingNumber, confidence: validate}
+  departure_date:       {table: Shipment, field: actualDepartureDate, confidence: validate}
+  arrival_date:         {table: Shipment, field: actualArrivalDate, confidence: validate}
+  planned_delivery_date: {table: Shipment, field: estimatedArrivalDate, confidence: validate}
+  origin:               {table: Shipment, field: portOfLoading, confidence: validate}
+  destination:          {table: Shipment, field: portOfDischarge, confidence: validate}
+
+business_objects:
+  shipment:
+    anchor: Shipment
+    grain: One row per shipment object (flatten containers/items for lower grain)
+    model_type: Accumulating snapshot (milestones) + event fact for status events
+    business_key: [shipmentUid]
+    tables: [Shipment]
+    duplicate_risks: ["API pulls return the full object on every change - keep the latest version per uid (ROW_NUMBER on modification timestamp)."]
+  purchase_order:
+    anchor: OrderDetail
+    grain: One row per order object (flatten orderItem for line grain)
+    model_type: Header/item transaction fact
+    business_key: [orderUid]
+    tables: [OrderDetail, PackingList]
+    duplicate_risks: ["Same as shipment - versioned objects."]
+
+transactions:
+  "ShipmentStatus API":
+    description: Shipment status / milestone API object
+    type: standard
+    business_object: shipment
+    tables: [Shipment]

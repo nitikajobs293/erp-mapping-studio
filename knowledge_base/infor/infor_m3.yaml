@@ -1,0 +1,199 @@
+erp:
+  id: infor_m3
+  name: Infor M3
+  vendor: Infor
+  family: Infor
+  versions: ["M3 13.x", "M3 CloudSuite"]
+  storage: relational
+  aliases: [m3, infor m3, movex]
+  date_type: YYYYMMDD_NUM
+  company_column: CONO
+  notes: >
+    Infor M3 (formerly Movex) table names are 6 characters (e.g. OOHEAD), fields are 6 characters where the
+    first 2 are a table-specific prefix (OAORNO in OOHEAD, OBORNO in OOLINE). Company (CONO) is part of every
+    key. Dates are numeric YYYYMMDD. Customer order = CO. In CloudSuite, data is accessed via Data Lake /
+    Compass SQL with the same table names.
+  source_refs:
+    - "Infor M3 MetaData Publisher (MDP) - validate fields in your release"
+
+tables:
+  OOHEAD:
+    description: Customer Order Header
+    module: Sales (CO)
+    primary_key: [OACONO, OAORNO]
+    confidence: inferred
+    role: Customer order header.
+    fields:
+      OACONO: {description: Company, type: NUMBER}
+      OAORNO: {description: Customer order number, type: VARCHAR(10)}
+      OAORTP: {description: Order type, type: VARCHAR(3)}
+      OACUNO: {description: Customer, type: VARCHAR(10)}
+      OAORDT: {description: Order date, type: YYYYMMDD_NUM}
+      OAORSL: {description: Lowest status, type: VARCHAR(2)}
+      OAORST: {description: Highest status, type: VARCHAR(2)}
+  OOLINE:
+    description: Customer Order Line
+    module: Sales (CO)
+    primary_key: [OBCONO, OBORNO, OBPONR, OBPOSX]
+    confidence: inferred
+    role: Customer order lines.
+    fields:
+      OBCONO: {description: Company, type: NUMBER}
+      OBORNO: {description: Order number, type: VARCHAR(10)}
+      OBPONR: {description: Line number, type: NUMBER}
+      OBPOSX: {description: Line suffix, type: NUMBER}
+      OBITNO: {description: Item number, type: VARCHAR(15)}
+      OBWHLO: {description: Warehouse, type: VARCHAR(3)}
+      OBORQT: {description: Ordered quantity (basic UoM), type: NUMBER}
+      OBDLQT: {description: Delivered quantity, type: NUMBER}
+      OBRORC: {description: Reference order category, type: NUMBER}
+      OBDWDT: {description: Requested delivery date, type: YYYYMMDD_NUM}
+      OBORST: {description: Line status, type: VARCHAR(2)}
+  MHDISH:
+    description: Delivery Header
+    module: Distribution
+    primary_key: [OQCONO, OQINOU, OQDLIX]
+    confidence: inferred
+    role: Delivery (delivery index DLIX) header for outbound deliveries.
+    fields:
+      OQCONO: {description: Company, type: NUMBER}
+      OQINOU: {description: Direction (1 = outbound), type: NUMBER}
+      OQDLIX: {description: Delivery number, type: NUMBER}
+      OQRIDN: {description: Order number reference, type: VARCHAR(10)}
+      OQWHLO: {description: Warehouse, type: VARCHAR(3)}
+      OQCONN: {description: Shipment number, type: NUMBER}
+      OQPGRS: {description: Progress status, type: VARCHAR(2)}
+      OQDSDT: {description: Departure date, type: YYYYMMDD_NUM}
+  MHDISL:
+    description: Delivery Line
+    module: Distribution
+    primary_key: [URCONO, URDLIX, URRORC, URRIDN, URRIDL, URRIDX]
+    confidence: validate
+    role: Delivery lines linking to order lines (RIDN/RIDL).
+    fields:
+      URCONO: {description: Company, type: NUMBER}
+      URDLIX: {description: Delivery number, type: NUMBER}
+      URRORC: {description: Reference order category, type: NUMBER}
+      URRIDN: {description: Order number, type: VARCHAR(10)}
+      URRIDL: {description: Order line, type: NUMBER}
+      URRIDX: {description: Line suffix, type: NUMBER}
+      URITNO: {description: Item, type: VARCHAR(15)}
+      URTRQT: {description: Quantity, type: NUMBER}
+  MITMAS:
+    description: Item Master
+    module: Item
+    primary_key: [MMCONO, MMITNO]
+    confidence: inferred
+    role: Item master.
+    fields:
+      MMCONO: {description: Company, type: NUMBER}
+      MMITNO: {description: Item number, type: VARCHAR(15)}
+      MMITDS: {description: Description, type: VARCHAR(30)}
+  MITBAL:
+    description: Item / Warehouse Balance
+    module: Inventory
+    primary_key: [MBCONO, MBWHLO, MBITNO]
+    confidence: inferred
+    role: Stock balance per item and warehouse.
+    fields:
+      MBCONO: {description: Company, type: NUMBER}
+      MBWHLO: {description: Warehouse, type: VARCHAR(3)}
+      MBITNO: {description: Item, type: VARCHAR(15)}
+      MBSTQT: {description: On-hand balance approved, type: NUMBER}
+      MBAVAL: {description: Allocatable quantity, type: NUMBER}
+  MITTRA:
+    description: Stock Transactions
+    module: Inventory
+    primary_key: [MTCONO, MTWHLO, MTITNO, MTTRDT, MTTRTM, MTTMSX]
+    confidence: validate
+    role: Inventory transaction history.
+    fields:
+      MTCONO: {description: Company, type: NUMBER}
+      MTWHLO: {description: Warehouse, type: VARCHAR(3)}
+      MTITNO: {description: Item, type: VARCHAR(15)}
+      MTTRDT: {description: Transaction date, type: YYYYMMDD_NUM}
+      MTTRTP: {description: Transaction type, type: NUMBER}
+      MTTRQT: {description: Quantity, type: NUMBER}
+      MTRIDN: {description: Order reference, type: VARCHAR(10)}
+
+relationships:
+  - {from: OOHEAD, to: OOLINE, on: [[OACONO, OBCONO], [OAORNO, OBORNO]], cardinality: "1:N", confidence: inferred}
+  - {from: OOLINE, to: MITMAS, on: [[OBCONO, MMCONO], [OBITNO, MMITNO]], cardinality: "N:1", confidence: inferred}
+  - {from: OOLINE, to: MHDISL, on: [[OBCONO, URCONO], [OBORNO, URRIDN], [OBPONR, URRIDL], [OBPOSX, URRIDX]], cardinality: "1:N", confidence: validate, filter: "{MHDISL}.URRORC = 3"}
+  - {from: MHDISH, to: MHDISL, on: [[OQCONO, URCONO], [OQDLIX, URDLIX]], cardinality: "1:N", confidence: inferred}
+  - {from: MITBAL, to: MITMAS, on: [[MBCONO, MMCONO], [MBITNO, MMITNO]], cardinality: "N:1", confidence: inferred}
+
+concepts:
+  sales_order_number:   {table: OOHEAD, field: OAORNO, confidence: inferred}
+  sales_order_item:     {table: OOLINE, field: OBPONR, confidence: inferred}
+  sales_order_type:     {table: OOHEAD, field: OAORTP, confidence: inferred}
+  order_date:           {table: OOHEAD, field: OAORDT, confidence: inferred}
+  customer:             {table: OOHEAD, field: OACUNO, confidence: inferred}
+  material:             {table: OOLINE, field: OBITNO, confidence: inferred}
+  material_description: {table: MITMAS, field: MMITDS, confidence: inferred}
+  order_quantity:       {table: OOLINE, field: OBORQT, confidence: inferred}
+  shipped_quantity:     {table: OOLINE, field: OBDLQT, confidence: inferred}
+  open_quantity:        {expr: "{OOLINE.OBORQT} - {OOLINE.OBDLQT}", confidence: inferred}
+  requested_delivery_date: {table: OOLINE, field: OBDWDT, confidence: inferred}
+  order_status:         {table: OOLINE, field: OBORST, confidence: inferred}
+  warehouse:            {table: OOLINE, field: OBWHLO, confidence: inferred}
+  plant:                {table: OOLINE, field: OBWHLO, confidence: inferred}
+  delivery_number:      {table: MHDISH, field: OQDLIX, confidence: inferred}
+  delivery_quantity:    {table: MHDISL, field: URTRQT, confidence: validate}
+  shipment_number:      {table: MHDISH, field: OQCONN, confidence: inferred}
+  actual_goods_issue_date: {table: MHDISH, field: OQDSDT, confidence: validate}
+  stock_unrestricted:   {table: MITBAL, field: MBSTQT, confidence: inferred}
+  stock_available:      {table: MITBAL, field: MBAVAL, confidence: inferred}
+  movement_date:        {table: MITTRA, field: MTTRDT, confidence: validate}
+  movement_type:        {table: MITTRA, field: MTTRTP, confidence: validate}
+  movement_quantity:    {table: MITTRA, field: MTTRQT, confidence: validate}
+
+business_objects:
+  sales_order:
+    anchor: OOLINE
+    header: OOHEAD
+    grain: One row per customer order line (CONO + ORNO + PONR + POSX)
+    model_type: Header/item transaction fact
+    business_key: [OBCONO, OBORNO, OBPONR, OBPOSX]
+    tables: [OOHEAD, OOLINE, MITMAS]
+    duplicate_risks: []
+  delivery:
+    anchor: MHDISL
+    header: MHDISH
+    grain: One row per delivery line
+    model_type: Header/item transaction fact
+    business_key: [URCONO, URDLIX, URRIDN, URRIDL, URRIDX]
+    tables: [MHDISH, MHDISL, OOLINE]
+    field_overrides:
+      material: {table: MHDISL, field: URITNO}
+      sales_order_number: {table: MHDISL, field: URRIDN}
+      sales_order_item: {table: MHDISL, field: URRIDL}
+      warehouse: {table: MHDISH, field: OQWHLO}
+    duplicate_risks: []
+  inventory:
+    anchor: MITBAL
+    grain: One row per item / warehouse
+    model_type: Periodic snapshot fact
+    business_key: [MBCONO, MBWHLO, MBITNO]
+    tables: [MITBAL, MITMAS]
+    field_overrides:
+      material: {table: MITBAL, field: MBITNO}
+      warehouse: {table: MITBAL, field: MBWHLO}
+    duplicate_risks: []
+
+transactions:
+  OIS300:
+    description: Customer Order. Open Toolbox
+    type: standard
+    business_object: sales_order
+    tables: [OOHEAD, OOLINE]
+  MWS410:
+    description: Delivery. Open Toolbox
+    type: standard
+    business_object: delivery
+    tables: [MHDISH, MHDISL]
+  MMS060:
+    description: Balance Identity. Open
+    type: standard
+    business_object: inventory
+    tables: [MITBAL, MITLOC]

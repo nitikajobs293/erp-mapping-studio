@@ -1,0 +1,437 @@
+erp:
+  id: jde_e1
+  name: JD Edwards EnterpriseOne
+  vendor: Oracle
+  family: JDE
+  versions: ["E1 9.2", "E1 9.1", "World A9.x (similar file names)"]
+  storage: relational
+  aliases: [jde, jd edwards, e1, enterpriseone, jde e1]
+  date_type: JULIAN        # CYYDDD numeric dates
+  notes: >
+    JDE dates are stored as Julian CYYDDD numbers (e.g. 124032 = 2024-02-01). Quantities and amounts are stored
+    without decimal point - the number of implied decimals is defined in the data dictionary (display decimals)
+    and for amounts by currency. Field names = 2-char table prefix + data item alias (F4211.SDDOCO = DOCO).
+    Closed sales order lines move from F4211 to history table F42119 when Sales Update (R42800) runs -
+    historical extracts must UNION F4211 and F42119. Status is driven by Next/Last status codes (NXTR/LTTR) from
+    the order activity rules (F40203), which are customer-configurable.
+  source_refs:
+    - "Oracle JD Edwards EnterpriseOne Sales Order Management / Data Dictionary"
+    - "JDE Table Design (Object Management Workbench) - verify in your environment"
+
+tables:
+  F4201:
+    description: Sales Order Header
+    module: Sales Order Management (42)
+    primary_key: [SHKCOO, SHDOCO, SHDCTO]
+    confidence: standard
+    role: Sales order header.
+    fields:
+      SHKCOO: {description: Order company, type: VARCHAR(5)}
+      SHDOCO: {description: Order number, type: NUMBER}
+      SHDCTO: {description: Order type (e.g. SO), type: VARCHAR(2)}
+      SHMCU: {description: Business unit (branch/plant), type: VARCHAR(12)}
+      SHAN8: {description: Sold-to address number, type: NUMBER}
+      SHSHAN: {description: Ship-to address number, type: NUMBER}
+      SHTRDJ: {description: Order date, type: JULIAN}
+      SHDRQJ: {description: Requested date, type: JULIAN}
+      SHVR01: {description: Customer reference, type: VARCHAR(25)}
+      SHCRCD: {description: Currency code, type: VARCHAR(3)}
+      SHOTOT: {description: Order gross amount, type: NUMBER}
+  F4211:
+    description: Sales Order Detail (open / in-process lines)
+    module: Sales Order Management (42)
+    primary_key: [SDKCOO, SDDOCO, SDDCTO, SDLNID]
+    confidence: standard
+    role: Sales order lines - item, quantities ordered/shipped/backordered, status codes, ship dates. Lines move to F42119 after Sales Update.
+    fields:
+      SDKCOO: {description: Order company, type: VARCHAR(5)}
+      SDDOCO: {description: Order number, type: NUMBER}
+      SDDCTO: {description: Order type, type: VARCHAR(2)}
+      SDLNID: {description: Line number (implied 3 decimals, e.g. 1000 = 1.000), type: NUMBER}
+      SDMCU: {description: Branch/plant, type: VARCHAR(12)}
+      SDAN8: {description: Sold-to, type: NUMBER}
+      SDSHAN: {description: Ship-to, type: NUMBER}
+      SDITM: {description: Short item number, type: NUMBER}
+      SDLITM: {description: 2nd item number, type: VARCHAR(25)}
+      SDDSC1: {description: Description, type: VARCHAR(30)}
+      SDLOCN: {description: Location, type: VARCHAR(20)}
+      SDLOTN: {description: Lot / serial number, type: VARCHAR(30)}
+      SDUORG: {description: Quantity ordered, type: NUMBER}
+      SDSOQS: {description: Quantity shipped, type: NUMBER}
+      SDSOBK: {description: Quantity backordered, type: NUMBER}
+      SDSOCN: {description: Quantity canceled, type: NUMBER}
+      SDUOM: {description: Transaction UoM, type: VARCHAR(2)}
+      SDAEXP: {description: Extended price, type: NUMBER}
+      SDCRCD: {description: Currency, type: VARCHAR(3)}
+      SDNXTR: {description: Next status, type: VARCHAR(3)}
+      SDLTTR: {description: Last status, type: VARCHAR(3)}
+      SDTRDJ: {description: Order date, type: JULIAN}
+      SDDRQJ: {description: Requested date, type: JULIAN}
+      SDPPDJ: {description: Promised ship date, type: JULIAN}
+      SDADDJ: {description: Actual ship date, type: JULIAN}
+      SDIVD: {description: Invoice date, type: JULIAN}
+      SDDOC: {description: Invoice / document number, type: NUMBER}
+      SDCARS: {description: Carrier number (address book), type: NUMBER}
+      SDMOT: {description: Mode of transport, type: VARCHAR(3)}
+      SDSHPN: {description: Shipment number, type: NUMBER}
+      SDRSDJ: {description: Promised delivery date, type: JULIAN}
+      SDLNTY: {description: Line type, type: VARCHAR(2)}
+      SDUPMJ: {description: Date updated, type: JULIAN}
+      SDTDAY: {description: Time of day updated, type: NUMBER}
+  F42119:
+    description: Sales Order Detail History
+    module: Sales Order Management (42)
+    primary_key: [SDKCOO, SDDOCO, SDDCTO, SDLNID]
+    confidence: standard
+    role: Same layout as F4211 - lines are moved here by Sales Update (R42800). Union with F4211 for full history.
+    fields:
+      SDKCOO: {description: Order company, type: VARCHAR(5)}
+      SDDOCO: {description: Order number, type: NUMBER}
+      SDDCTO: {description: Order type, type: VARCHAR(2)}
+      SDLNID: {description: Line number, type: NUMBER}
+  F0101:
+    description: Address Book Master
+    module: Address Book (01)
+    primary_key: [ABAN8]
+    confidence: standard
+    role: Customers, suppliers, carriers, ship-to addresses - all are address book numbers.
+    fields:
+      ABAN8: {description: Address number, type: NUMBER}
+      ABALPH: {description: Alpha name, type: VARCHAR(40)}
+      ABAT1: {description: Search type (C customer, V supplier...), type: VARCHAR(3)}
+  F4101:
+    description: Item Master
+    module: Inventory (41)
+    primary_key: [IMITM]
+    confidence: standard
+    role: Item master - short item (ITM), 2nd (LITM), 3rd (AITM) item numbers and descriptions.
+    fields:
+      IMITM: {description: Short item number, type: NUMBER}
+      IMLITM: {description: 2nd item number, type: VARCHAR(25)}
+      IMAITM: {description: 3rd item number, type: VARCHAR(25)}
+      IMDSC1: {description: Description line 1, type: VARCHAR(30)}
+      IMUOM1: {description: Primary UoM, type: VARCHAR(2)}
+  F4102:
+    description: Item Branch
+    module: Inventory (41)
+    primary_key: [IBITM, IBMCU]
+    confidence: standard
+    role: Item attributes per branch/plant.
+    fields:
+      IBITM: {description: Short item number, type: NUMBER}
+      IBMCU: {description: Branch/plant, type: VARCHAR(12)}
+  F41021:
+    description: Item Location (on-hand / commitments)
+    module: Inventory (41)
+    primary_key: [LIITM, LIMCU, LILOCN, LILOTN]
+    confidence: standard
+    role: Inventory balances per item / branch / location / lot.
+    fields:
+      LIITM: {description: Short item number, type: NUMBER}
+      LIMCU: {description: Branch/plant, type: VARCHAR(12)}
+      LILOCN: {description: Location, type: VARCHAR(20)}
+      LILOTN: {description: Lot / serial, type: VARCHAR(30)}
+      LIPQOH: {description: Quantity on hand (primary UoM), type: NUMBER}
+      LIHCOM: {description: Hard committed quantity, type: NUMBER}
+      LIPCOM: {description: Soft committed quantity, type: NUMBER}
+      LIQOWO: {description: Quantity on work order, type: NUMBER}
+      LIPBCK: {description: Backorder quantity, type: NUMBER}
+      LILOTS: {description: Lot status code (blank = approved), type: VARCHAR(1)}
+  F4108:
+    description: Lot Master
+    module: Inventory (41)
+    primary_key: [IOITM, IOMCU, IOLOTN]
+    confidence: standard
+    role: Lot / serial attributes - expiration, lot status.
+    fields:
+      IOITM: {description: Short item, type: NUMBER}
+      IOMCU: {description: Branch/plant, type: VARCHAR(12)}
+      IOLOTN: {description: Lot / serial number, type: VARCHAR(30)}
+      IOMMEJ: {description: Expiration date, type: JULIAN}
+      IOLOTS: {description: Lot status, type: VARCHAR(1)}
+  F4111:
+    description: Item Ledger (Cardex)
+    module: Inventory (41)
+    primary_key: [ILUKID]
+    confidence: standard
+    role: Every inventory transaction (receipts, issues, shipments, transfers, adjustments).
+    fields:
+      ILUKID: {description: Unique key ID, type: NUMBER}
+      ILITM: {description: Short item, type: NUMBER}
+      ILMCU: {description: Branch/plant, type: VARCHAR(12)}
+      ILLOCN: {description: Location, type: VARCHAR(20)}
+      ILLOTN: {description: Lot / serial, type: VARCHAR(30)}
+      ILDCT: {description: Document type (e.g. IS, IT, OV, RI), type: VARCHAR(2)}
+      ILDOC: {description: Document number, type: NUMBER}
+      ILKCOO: {description: Order company, type: VARCHAR(5)}
+      ILDOCO: {description: Order number, type: NUMBER}
+      ILDCTO: {description: Order type, type: VARCHAR(2)}
+      ILLNID: {description: Order line, type: NUMBER}
+      ILTRQT: {description: Transaction quantity (signed), type: NUMBER}
+      ILTRDJ: {description: Transaction date, type: JULIAN}
+      ILDGL: {description: G/L date, type: JULIAN}
+  F4215:
+    description: Shipment Header (Transportation Management)
+    module: Transportation (49)
+    primary_key: [XHSHPN]
+    confidence: validate
+    role: Shipment header when JDE Transportation Management is used. Shipment number links to F4211.SDSHPN.
+    notes: "Only populated if Transportation Management (system 49) is implemented. Validate column names in your environment."
+    fields:
+      XHSHPN: {description: Shipment number, type: NUMBER}
+      XHCARS: {description: Carrier, type: NUMBER}
+      XHMOT: {description: Mode of transport, type: VARCHAR(3)}
+      XHSSTS: {description: Shipment status, type: VARCHAR(2)}
+      XHADDJ: {description: Actual ship date, type: JULIAN}
+  F4301:
+    description: Purchase Order Header
+    module: Procurement (43)
+    primary_key: [PHKCOO, PHDOCO, PHDCTO, PHSFXO]
+    confidence: standard
+    role: Purchase order header.
+    fields:
+      PHKCOO: {description: Order company, type: VARCHAR(5)}
+      PHDOCO: {description: Order number, type: NUMBER}
+      PHDCTO: {description: Order type (OP), type: VARCHAR(2)}
+      PHSFXO: {description: Order suffix, type: VARCHAR(3)}
+      PHAN8: {description: Supplier, type: NUMBER}
+      PHTRDJ: {description: Order date, type: JULIAN}
+  F4311:
+    description: Purchase Order Detail
+    module: Procurement (43)
+    primary_key: [PDKCOO, PDDOCO, PDDCTO, PDSFXO, PDLNID]
+    confidence: standard
+    role: Purchase order lines.
+    fields:
+      PDKCOO: {description: Order company, type: VARCHAR(5)}
+      PDDOCO: {description: Order number, type: NUMBER}
+      PDDCTO: {description: Order type, type: VARCHAR(2)}
+      PDSFXO: {description: Suffix, type: VARCHAR(3)}
+      PDLNID: {description: Line number, type: NUMBER}
+      PDITM: {description: Short item, type: NUMBER}
+      PDMCU: {description: Branch/plant, type: VARCHAR(12)}
+      PDUORG: {description: Quantity ordered, type: NUMBER}
+      PDUREC: {description: Quantity received, type: NUMBER}
+      PDAEXP: {description: Extended amount, type: NUMBER}
+  F43121:
+    description: Purchase Order Receiver
+    module: Procurement (43)
+    primary_key: [PRMATC, PRDOC, PRDCT, PRKCOO, PRDOCO, PRDCTO, PRSFXO, PRLNID, PRNLIN]
+    confidence: inferred
+    role: Receipts (and vouchers) against PO lines. PRMATC = 1 receipt records.
+    fields:
+      PRDOCO: {description: Order number, type: NUMBER}
+      PRDCTO: {description: Order type, type: VARCHAR(2)}
+      PRKCOO: {description: Order company, type: VARCHAR(5)}
+      PRSFXO: {description: Suffix, type: VARCHAR(3)}
+      PRLNID: {description: Line, type: NUMBER}
+      PRMATC: {description: Match type (1 = receipt), type: VARCHAR(1)}
+      PRUREC: {description: Quantity received, type: NUMBER}
+      PRRCDJ: {description: Date received, type: JULIAN}
+  F4801:
+    description: Work Order Master
+    module: Manufacturing (31/48)
+    primary_key: [WADOCO]
+    confidence: standard
+    role: Work order / production order header.
+    fields:
+      WADOCO: {description: Work order number, type: NUMBER}
+      WADCTO: {description: Order type (WO), type: VARCHAR(2)}
+      WAITM: {description: Item, type: NUMBER}
+      WAMMCU: {description: Branch/plant, type: VARCHAR(12)}
+      WAUORG: {description: Quantity ordered, type: NUMBER}
+      WASOQS: {description: Quantity completed, type: NUMBER}
+      WASRST: {description: Work order status, type: VARCHAR(2)}
+  F3111:
+    description: Work Order Parts List
+    module: Manufacturing (31)
+    primary_key: [WMUKID]
+    confidence: inferred
+    role: Components required / issued for a work order.
+    fields:
+      WMUKID: {description: Unique key, type: NUMBER}
+      WMDOCO: {description: Work order, type: NUMBER}
+      WMCPIT: {description: Component item, type: NUMBER}
+      WMUORG: {description: Quantity required, type: NUMBER}
+      WMTRQT: {description: Quantity issued, type: NUMBER}
+
+relationships:
+  - {from: F4201, to: F4211, on: [[SHKCOO, SDKCOO], [SHDOCO, SDDOCO], [SHDCTO, SDDCTO]], cardinality: "1:N", confidence: standard}
+  - {from: F4211, to: F4101, on: [[SDITM, IMITM]], cardinality: "N:1", confidence: standard}
+  - {from: F4211, to: F0101, on: [[SDAN8, ABAN8]], cardinality: "N:1", confidence: standard, label: sold-to}
+  - {from: F4211, to: F4215, on: [[SDSHPN, XHSHPN]], cardinality: "N:1", confidence: validate}
+  - {from: F4211, to: F4111, on: [[SDKCOO, ILKCOO], [SDDOCO, ILDOCO], [SDDCTO, ILDCTO], [SDLNID, ILLNID]], cardinality: "1:N", confidence: inferred, label: "ship confirm / issue transactions"}
+  - {from: F41021, to: F4101, on: [[LIITM, IMITM]], cardinality: "N:1", confidence: standard}
+  - {from: F41021, to: F4108, on: [[LIITM, IOITM], [LIMCU, IOMCU], [LILOTN, IOLOTN]], cardinality: "N:1", confidence: standard}
+  - {from: F4102, to: F41021, on: [[IBITM, LIITM], [IBMCU, LIMCU]], cardinality: "1:N", confidence: standard}
+  - {from: F4111, to: F4101, on: [[ILITM, IMITM]], cardinality: "N:1", confidence: standard}
+  - {from: F4301, to: F4311, on: [[PHKCOO, PDKCOO], [PHDOCO, PDDOCO], [PHDCTO, PDDCTO], [PHSFXO, PDSFXO]], cardinality: "1:N", confidence: standard}
+  - {from: F4311, to: F43121, on: [[PDKCOO, PRKCOO], [PDDOCO, PRDOCO], [PDDCTO, PRDCTO], [PDSFXO, PRSFXO], [PDLNID, PRLNID]], cardinality: "1:N", confidence: inferred, filter: "{F43121}.PRMATC = '1'"}
+  - {from: F4301, to: F0101, on: [[PHAN8, ABAN8]], cardinality: "N:1", confidence: standard}
+  - {from: F4801, to: F3111, on: [[WADOCO, WMDOCO]], cardinality: "1:N", confidence: inferred}
+  - {from: F4801, to: F4101, on: [[WAITM, IMITM]], cardinality: "N:1", confidence: standard}
+
+concepts:
+  sales_order_number:   {table: F4211, field: SDDOCO, confidence: standard, note: "Full business key = SDKCOO + SDDOCO + SDDCTO"}
+  sales_order_item:     {expr: "{F4211.SDLNID} / 1000", confidence: inferred, note: "Line number stored with 3 implied decimals"}
+  sales_order_type:     {table: F4211, field: SDDCTO, confidence: standard}
+  order_date:           {table: F4211, field: SDTRDJ, confidence: standard}
+  customer:             {table: F4211, field: SDAN8, confidence: standard}
+  customer_name:        {table: F0101, field: ABALPH, confidence: standard}
+  ship_to:              {table: F4211, field: SDSHAN, confidence: standard}
+  sales_org:            {table: F4211, field: SDKCOO, confidence: inferred, note: "JDE has no sales org - company / business unit is the closest equivalent"}
+  material:             {table: F4211, field: SDLITM, confidence: standard, alternatives: ["SDITM short item number", "SDAITM 3rd item number"]}
+  material_description: {table: F4211, field: SDDSC1, confidence: standard, alternatives: ["F4101.IMDSC1"]}
+  order_quantity:       {table: F4211, field: SDUORG, confidence: standard, note: "Apply data dictionary display decimals"}
+  confirmed_quantity:   {expr: "{F4211.SDUORG} - {F4211.SDSOBK} - {F4211.SDSOCN}", confidence: inferred, note: "JDE has no confirmed quantity concept - committed (hard/soft) is in F41021 per location"}
+  open_quantity:        {expr: "{F4211.SDUORG} - {F4211.SDSOQS} - {F4211.SDSOCN}", confidence: inferred, note: "Plus validate against Next Status = 999 (closed)"}
+  shipped_quantity:     {table: F4211, field: SDSOQS, confidence: standard}
+  sales_uom:            {table: F4211, field: SDUOM, confidence: standard}
+  requested_delivery_date: {table: F4211, field: SDDRQJ, confidence: standard}
+  order_status:         {expr: "{F4211.SDNXTR} || '/' || {F4211.SDLTTR}", confidence: inferred, note: "Next/Last status per order activity rules (F40203) - customer-configured; 999 = closed"}
+  rejection_reason:     {table: F4211, field: SDSOCN, confidence: validate, note: "JDE stores canceled quantity, not a rejection reason. Cancel reason codes may be in custom fields / audit tables"}
+  net_value:            {table: F4211, field: SDAEXP, confidence: standard, note: "Implied decimals by currency"}
+  currency:             {table: F4211, field: SDCRCD, confidence: standard}
+  plant:                {table: F4211, field: SDMCU, confidence: standard}
+  storage_location:     {table: F4211, field: SDLOCN, confidence: standard}
+  batch:                {table: F4211, field: SDLOTN, confidence: standard}
+  serial_number:        {table: F4211, field: SDLOTN, confidence: inferred, note: "Serial-controlled items store serial in lot field; validate item lot process type"}
+  planned_goods_issue_date: {table: F4211, field: SDPPDJ, confidence: inferred}
+  planned_delivery_date: {table: F4211, field: SDRSDJ, confidence: inferred}
+  actual_goods_issue_date: {table: F4211, field: SDADDJ, confidence: standard}
+  delivery_number:      {table: F4211, field: SDSHPN, confidence: validate, note: "JDE has no separate delivery document; shipment number (Transportation) or pick slip number are used. Validate your process."}
+  shipment_number:      {table: F4211, field: SDSHPN, confidence: inferred}
+  carrier:              {table: F4211, field: SDCARS, confidence: standard}
+  transport_mode:       {table: F4211, field: SDMOT, confidence: standard}
+  shipment_status:      {table: F4215, field: XHSSTS, confidence: validate}
+  invoice_number:       {table: F4211, field: SDDOC, confidence: standard}
+  invoice_date:         {table: F4211, field: SDIVD, confidence: standard}
+  stock_unrestricted:   {table: F41021, field: LIPQOH, confidence: standard}
+  stock_available:      {expr: "{F41021.LIPQOH} - {F41021.LIHCOM} - {F41021.LIPCOM}", confidence: inferred, note: "Simplified availability; real availability calculation is configurable (P41001)"}
+  stock_blocked:        {expr: "CASE WHEN {F41021.LILOTS} <> ' ' THEN {F41021.LIPQOH} ELSE 0 END", confidence: inferred, note: "Lot status code non-blank = on hold"}
+  movement_type:        {table: F4111, field: ILDCT, confidence: standard}
+  material_document:    {table: F4111, field: ILDOC, confidence: standard}
+  movement_date:        {table: F4111, field: ILTRDJ, confidence: standard}
+  movement_quantity:    {table: F4111, field: ILTRQT, confidence: standard}
+  purchase_order:       {table: F4311, field: PDDOCO, confidence: standard}
+  purchase_order_item:  {table: F4311, field: PDLNID, confidence: standard}
+  supplier:             {table: F4301, field: PHAN8, confidence: standard}
+  gr_quantity:          {table: F43121, field: PRUREC, confidence: inferred}
+  gr_date:              {table: F43121, field: PRRCDJ, confidence: inferred}
+  production_order:     {table: F4801, field: WADOCO, confidence: standard}
+  production_quantity:  {table: F4801, field: WAUORG, confidence: standard}
+  production_completed_qty: {table: F4801, field: WASOQS, confidence: standard}
+  component_quantity:   {table: F3111, field: WMUORG, confidence: inferred}
+  warehouse:            {table: F4211, field: SDMCU, confidence: inferred, note: "Branch/plant acts as warehouse unless JDE Warehouse Management (F4600 series) is used"}
+
+business_objects:
+  sales_order:
+    anchor: F4211
+    header: F4201
+    grain: One row per sales order line (SDKCOO + SDDOCO + SDDCTO + SDLNID)
+    model_type: Header/item transaction fact (union F4211 + F42119 for history)
+    business_key: [SDKCOO, SDDOCO, SDDCTO, SDLNID]
+    history_union: {F4211: F42119}
+    tables: [F4201, F4211, F42119, F0101, F4101]
+    duplicate_risks:
+      - "A line can exist in both F4211 and F42119 during Sales Update timing - deduplicate on key keeping the latest SDUPMJ/SDTDAY."
+      - "Backorder/split lines create new line numbers (e.g. 1.001) - they are real lines, not duplicates."
+  delivery:
+    anchor: F4211
+    header: F4201
+    grain: One row per shipped sales order line (JDE has no separate delivery document)
+    model_type: Transaction fact
+    business_key: [SDKCOO, SDDOCO, SDDCTO, SDLNID]
+    base_filter: "{F4211}.SDSOQS <> 0"
+    tables: [F4211, F4201, F4215, F0101]
+    duplicate_risks: ["Same as sales order - union with F42119 for shipped history."]
+  shipment:
+    anchor: F4211
+    grain: One row per sales order line assigned to a shipment
+    model_type: Transaction fact
+    business_key: [SDKCOO, SDDOCO, SDDCTO, SDLNID]
+    base_filter: "{F4211}.SDSHPN <> 0"
+    tables: [F4211, F4215, F0101]
+    duplicate_risks: ["Shipment detail tables (F4216 etc.) may be needed for multi-piece shipments - validate."]
+  inventory:
+    anchor: F41021
+    grain: One row per item / branch / location / lot (current balance)
+    model_type: Periodic snapshot fact
+    business_key: [LIITM, LIMCU, LILOCN, LILOTN]
+    tables: [F41021, F4101, F4102, F4108]
+    field_overrides:
+      material: {table: F4101, field: IMLITM}
+      material_description: {table: F4101, field: IMDSC1}
+      plant: {table: F41021, field: LIMCU}
+      storage_location: {table: F41021, field: LILOCN}
+      batch: {table: F41021, field: LILOTN}
+    duplicate_risks: []
+  inventory_movement:
+    anchor: F4111
+    grain: One row per item ledger record (ILUKID)
+    model_type: Transaction fact (event history)
+    business_key: [ILUKID]
+    tables: [F4111, F4101]
+    field_overrides:
+      material: {table: F4101, field: IMLITM}
+      plant: {table: F4111, field: ILMCU}
+      storage_location: {table: F4111, field: ILLOCN}
+      batch: {table: F4111, field: ILLOTN}
+      sales_order_number: {table: F4111, field: ILDOCO}
+    duplicate_risks: []
+  purchase_order:
+    anchor: F4311
+    header: F4301
+    grain: One row per purchase order line
+    model_type: Header/item transaction fact
+    business_key: [PDKCOO, PDDOCO, PDDCTO, PDSFXO, PDLNID]
+    tables: [F4301, F4311, F43121, F0101]
+    field_overrides:
+      material: {table: F4311, field: PDITM}
+      plant: {table: F4311, field: PDMCU}
+      order_quantity: {table: F4311, field: PDUORG}
+      net_value: {table: F4311, field: PDAEXP}
+      order_date: {table: F4301, field: PHTRDJ}
+    duplicate_risks: ["F43121 has receipt and voucher match records (PRMATC) - filter PRMATC = '1' for receipts."]
+  production_order:
+    anchor: F4801
+    grain: One row per work order
+    model_type: Accumulating snapshot
+    business_key: [WADOCO]
+    tables: [F4801, F3111, F4101]
+    field_overrides:
+      material: {table: F4801, field: WAITM}
+      plant: {table: F4801, field: WAMMCU}
+    duplicate_risks: ["F3111 is 1:N components."]
+
+transactions:
+  P4210:
+    description: Sales Order Entry (application)
+    type: standard
+    business_object: sales_order
+    tables: [F4201, F4211, F0101, F4101]
+  P42101:
+    description: Sales Order Entry (newer application)
+    type: standard
+    business_object: sales_order
+    tables: [F4201, F4211]
+  P4205:
+    description: Shipment Confirmation
+    type: standard
+    business_object: delivery
+    tables: [F4211, F4111, F41021]
+  R42800:
+    description: Sales Update (moves lines to history, creates invoices/GL)
+    type: standard
+    business_object: sales_order
+    tables: [F4211, F42119, F4201, F42019]
+  P41202:
+    description: Item Availability
+    type: standard
+    business_object: inventory
+    tables: [F41021, F4101, F4102]
+  P4111:
+    description: Item Ledger Inquiry (Cardex)
+    type: standard
+    business_object: inventory_movement
+    tables: [F4111]

@@ -1,0 +1,294 @@
+erp:
+  id: blue_yonder_wms
+  name: Blue Yonder WMS (JDA / RedPrairie Dispatcher)
+  vendor: Blue Yonder
+  family: Blue Yonder
+  versions: ["BY WMS 2020+", "JDA WMS 2016/2018", "RedPrairie 2012"]
+  storage: mixed
+  aliases: [blue yonder, by, jda, redprairie, by wms, blue yonder wms]
+  date_type: DATE
+  notes: >
+    The on-premise / private-cloud Blue Yonder WMS (Dispatcher) uses a relational schema with lower-case
+    short table names (ord, ord_line, shipment, ...). Most tables are multi-warehouse (wh_id) and
+    multi-client (client_id / prt_client_id) - always include them in joins. SaaS Blue Yonder (Luminate /
+    Cognitive) exposes data via APIs and data-sharing instead; Blue Yonder TMS has its own schema.
+    Status code values are configurable (dscmst/codmst) - treat status mappings as needing validation.
+  source_refs:
+    - "Blue Yonder WMS data dictionary (MOCA 'list table columns') - validate in your instance"
+
+tables:
+  ord:
+    description: Customer Order Header (outbound order in WMS)
+    module: Outbound
+    primary_key: [client_id, ordnum, wh_id]
+    confidence: inferred
+    role: Order downloaded from host ERP into WMS.
+    fields:
+      client_id: {description: Client, type: VARCHAR}
+      ordnum: {description: Order number (often = host sales order/delivery), type: VARCHAR}
+      wh_id: {description: Warehouse, type: VARCHAR}
+      ordtyp: {description: Order type, type: VARCHAR}
+      cponum: {description: Customer PO number, type: VARCHAR}
+      entdte: {description: Entered date, type: DATE}
+      st_adr_id: {description: Ship-to address id, type: VARCHAR}
+      bt_adr_id: {description: Bill-to address id, type: VARCHAR}
+      rt_adr_id: {description: Sold-to (customer) address id, type: VARCHAR}
+  ord_line:
+    description: Order Line
+    module: Outbound
+    primary_key: [client_id, ordnum, ordlin, ordsln, wh_id]
+    confidence: inferred
+    role: Order lines with ordered and shipped quantity.
+    fields:
+      client_id: {description: Client, type: VARCHAR}
+      ordnum: {description: Order number, type: VARCHAR}
+      ordlin: {description: Order line, type: VARCHAR}
+      ordsln: {description: Order sub-line, type: VARCHAR}
+      wh_id: {description: Warehouse, type: VARCHAR}
+      prtnum: {description: Part (item) number, type: VARCHAR}
+      prt_client_id: {description: Part client, type: VARCHAR}
+      ordqty: {description: Ordered quantity, type: NUMBER}
+      shpqty: {description: Shipped quantity, type: NUMBER}
+      early_shpdte: {description: Earliest ship date, type: DATE}
+      late_shpdte: {description: Latest ship date, type: DATE}
+      lotnum: {description: Requested lot, type: VARCHAR}
+  shipment:
+    description: Shipment
+    module: Outbound / Shipping
+    primary_key: [ship_id]
+    confidence: inferred
+    role: WMS shipment (one per ship-to/carrier/service per wave, configurable).
+    fields:
+      ship_id: {description: Shipment id, type: VARCHAR}
+      wh_id: {description: Warehouse, type: VARCHAR}
+      shpsts: {description: Shipment status, type: VARCHAR}
+      carcod: {description: Carrier code, type: VARCHAR}
+      srvlvl: {description: Service level, type: VARCHAR}
+      stop_id: {description: Stop, type: VARCHAR}
+      rt_adr_id: {description: Ship-to address, type: VARCHAR}
+      early_shpdte: {description: Early ship date, type: DATE}
+      late_dlvdte: {description: Late delivery date, type: DATE}
+      loddte: {description: Loaded date, type: DATE}
+      doc_num: {description: Document / BoL number, type: VARCHAR}
+      track_num: {description: Tracking number, type: VARCHAR}
+  shipment_line:
+    description: Shipment Line
+    module: Outbound / Shipping
+    primary_key: [ship_line_id]
+    confidence: inferred
+    role: Links order lines to shipments with picked/staged/shipped quantities.
+    fields:
+      ship_line_id: {description: Shipment line id, type: VARCHAR}
+      ship_id: {description: Shipment, type: VARCHAR}
+      client_id: {description: Client, type: VARCHAR}
+      ordnum: {description: Order, type: VARCHAR}
+      ordlin: {description: Order line, type: VARCHAR}
+      ordsln: {description: Order sub-line, type: VARCHAR}
+      wh_id: {description: Warehouse, type: VARCHAR}
+      pckqty: {description: Pick quantity, type: NUMBER}
+      stgqty: {description: Staged quantity, type: NUMBER}
+      shpqty: {description: Shipped quantity, type: NUMBER}
+      linsts: {description: Line status, type: VARCHAR}
+  stop:
+    description: Stop
+    module: Shipping / Loads
+    primary_key: [stop_id]
+    confidence: inferred
+    role: Stop on a carrier move (load).
+    fields:
+      stop_id: {description: Stop id, type: VARCHAR}
+      car_move_id: {description: Carrier move, type: VARCHAR}
+      stop_seq: {description: Stop sequence, type: NUMBER}
+  car_move:
+    description: Carrier Move (load)
+    module: Shipping / Loads
+    primary_key: [car_move_id]
+    confidence: inferred
+    role: Load / carrier move assigned to a trailer.
+    fields:
+      car_move_id: {description: Carrier move id, type: VARCHAR}
+      trlr_id: {description: Trailer, type: VARCHAR}
+      carcod: {description: Carrier, type: VARCHAR}
+  trlr:
+    description: Trailer
+    module: Yard / Shipping
+    primary_key: [trlr_id]
+    confidence: inferred
+    role: Trailer with dispatch date and status.
+    fields:
+      trlr_id: {description: Trailer id, type: VARCHAR}
+      trlr_num: {description: Trailer number, type: VARCHAR}
+      carcod: {description: Carrier, type: VARCHAR}
+      trlr_stat: {description: Trailer status, type: VARCHAR}
+      dispatch_dte: {description: Dispatch date, type: DATE}
+  prtmst:
+    description: Part (Item) Master
+    module: Master data
+    primary_key: [prtnum, prt_client_id, wh_id_tmpl]
+    confidence: inferred
+    role: Item master per client / warehouse template.
+    fields:
+      prtnum: {description: Part number, type: VARCHAR}
+      prt_client_id: {description: Client, type: VARCHAR}
+      wh_id_tmpl: {description: Warehouse template, type: VARCHAR}
+  invdtl:
+    description: Inventory Detail
+    module: Inventory
+    primary_key: [dtlnum]
+    confidence: inferred
+    role: Lowest inventory level (quantity, status, lot) inside a sub-load. Hierarchy invlod > invsub > invdtl.
+    fields:
+      dtlnum: {description: Detail id, type: VARCHAR}
+      subnum: {description: Sub-load (case), type: VARCHAR}
+      prtnum: {description: Part, type: VARCHAR}
+      prt_client_id: {description: Client, type: VARCHAR}
+      untqty: {description: Unit quantity, type: NUMBER}
+      invsts: {description: Inventory status (e.g. A available, H hold, D damaged), type: VARCHAR}
+      lotnum: {description: Lot, type: VARCHAR}
+      ship_line_id: {description: Shipment line once allocated/picked, type: VARCHAR}
+  invsub:
+    description: Inventory Sub-load (case)
+    module: Inventory
+    primary_key: [subnum]
+    confidence: inferred
+    role: Case level.
+    fields:
+      subnum: {description: Sub-load id, type: VARCHAR}
+      lodnum: {description: Load (pallet / LPN), type: VARCHAR}
+  invlod:
+    description: Inventory Load (pallet / LPN)
+    module: Inventory
+    primary_key: [lodnum]
+    confidence: inferred
+    role: Pallet / LPN with storage location.
+    fields:
+      lodnum: {description: Load id (LPN), type: VARCHAR}
+      stoloc: {description: Storage location, type: VARCHAR}
+      wh_id: {description: Warehouse, type: VARCHAR}
+  dlytrn:
+    description: Daily Transactions
+    module: Inventory history
+    primary_key: [dlytrn_id]
+    confidence: inferred
+    role: Transaction history (moves, picks, adjustments, shipments).
+    fields:
+      dlytrn_id: {description: Transaction id, type: VARCHAR}
+      actcod: {description: Activity code, type: VARCHAR}
+      prtnum: {description: Part, type: VARCHAR}
+      trnqty: {description: Quantity, type: NUMBER}
+      trndte: {description: Transaction date/time, type: TIMESTAMP}
+      frstol: {description: From location, type: VARCHAR}
+      tostol: {description: To location, type: VARCHAR}
+      ordnum: {description: Order, type: VARCHAR}
+      ship_id: {description: Shipment, type: VARCHAR}
+      wh_id: {description: Warehouse, type: VARCHAR}
+
+relationships:
+  - {from: ord, to: ord_line, on: [[client_id, client_id], [ordnum, ordnum], [wh_id, wh_id]], cardinality: "1:N", confidence: inferred}
+  - {from: ord_line, to: shipment_line, on: [[client_id, client_id], [ordnum, ordnum], [ordlin, ordlin], [ordsln, ordsln], [wh_id, wh_id]], cardinality: "1:N", confidence: inferred}
+  - {from: shipment, to: shipment_line, on: [[ship_id, ship_id]], cardinality: "1:N", confidence: inferred}
+  - {from: shipment, to: stop, on: [[stop_id, stop_id]], cardinality: "N:1", confidence: inferred}
+  - {from: stop, to: car_move, on: [[car_move_id, car_move_id]], cardinality: "N:1", confidence: inferred}
+  - {from: car_move, to: trlr, on: [[trlr_id, trlr_id]], cardinality: "N:1", confidence: inferred}
+  - {from: ord_line, to: prtmst, on: [[prtnum, prtnum], [prt_client_id, prt_client_id]], cardinality: "N:1", confidence: inferred, filter: "{prtmst}.wh_id_tmpl = '----'", note: "wh_id_tmpl template value is installation-specific"}
+  - {from: invdtl, to: invsub, on: [[subnum, subnum]], cardinality: "N:1", confidence: inferred}
+  - {from: invsub, to: invlod, on: [[lodnum, lodnum]], cardinality: "N:1", confidence: inferred}
+
+concepts:
+  sales_order_number:   {table: ord, field: ordnum, confidence: inferred, note: "Holds the host ERP order/delivery number as interfaced"}
+  sales_order_item:     {table: ord_line, field: ordlin, confidence: inferred}
+  sales_order_type:     {table: ord, field: ordtyp, confidence: inferred}
+  order_date:           {table: ord, field: entdte, confidence: inferred}
+  customer:             {table: ord, field: rt_adr_id, confidence: inferred}
+  ship_to:              {table: ord, field: st_adr_id, confidence: inferred}
+  material:             {table: ord_line, field: prtnum, confidence: inferred}
+  order_quantity:       {table: ord_line, field: ordqty, confidence: inferred}
+  shipped_quantity:     {table: shipment_line, field: shpqty, confidence: inferred}
+  planned_goods_issue_date: {table: ord_line, field: early_shpdte, confidence: inferred}
+  warehouse:            {table: ord, field: wh_id, confidence: inferred}
+  plant:                {table: ord, field: wh_id, confidence: inferred}
+  batch:                {table: invdtl, field: lotnum, confidence: inferred}
+  delivery_number:      {table: ord, field: ordnum, confidence: validate, note: "In SAP-integrated WMS the order number is typically the SAP delivery number"}
+  shipment_number:      {table: shipment, field: ship_id, confidence: inferred}
+  shipment_status:      {table: shipment, field: shpsts, confidence: inferred}
+  carrier:              {table: shipment, field: carcod, confidence: inferred}
+  transport_mode:       {table: shipment, field: srvlvl, confidence: inferred}
+  tracking_number:      {table: shipment, field: track_num, confidence: validate}
+  actual_goods_issue_date: {table: trlr, field: dispatch_dte, confidence: inferred, note: "Trailer dispatch = physical departure"}
+  departure_date:       {table: trlr, field: dispatch_dte, confidence: inferred}
+  planned_delivery_date: {table: shipment, field: late_dlvdte, confidence: inferred}
+  stock_unrestricted:   {table: invdtl, field: untqty, confidence: inferred, note: "Aggregate by part/location; filter invsts for available"}
+  storage_location:     {table: invlod, field: stoloc, confidence: inferred}
+  handling_unit:        {table: invlod, field: lodnum, confidence: inferred}
+  movement_type:        {table: dlytrn, field: actcod, confidence: inferred}
+  movement_date:        {table: dlytrn, field: trndte, confidence: inferred}
+  movement_quantity:    {table: dlytrn, field: trnqty, confidence: inferred}
+  material_document:    {table: dlytrn, field: dlytrn_id, confidence: inferred}
+
+business_objects:
+  sales_order:
+    anchor: ord_line
+    header: ord
+    grain: One row per order line / sub-line per warehouse
+    model_type: Header/item transaction fact
+    business_key: [client_id, ordnum, ordlin, ordsln, wh_id]
+    tables: [ord, ord_line, prtmst]
+    duplicate_risks: ["Same order number can exist per client and warehouse - always key on client_id + wh_id."]
+  shipment:
+    anchor: shipment_line
+    header: shipment
+    grain: One row per shipment line (order line allocated to a shipment)
+    model_type: Bridge + accumulating snapshot
+    business_key: [ship_line_id]
+    tables: [shipment, shipment_line, ord_line, ord, stop, car_move, trlr]
+    field_overrides:
+      material: {table: ord_line, field: prtnum}
+      sales_order_number: {table: shipment_line, field: ordnum}
+      sales_order_item: {table: shipment_line, field: ordlin}
+    duplicate_risks: ["Order lines split across shipments produce several shipment lines - correct, not duplicates."]
+  delivery:
+    anchor: shipment_line
+    header: shipment
+    grain: One row per shipment line
+    model_type: Transaction fact
+    business_key: [ship_line_id]
+    tables: [shipment, shipment_line, ord, ord_line]
+    field_overrides:
+      material: {table: ord_line, field: prtnum}
+      delivery_quantity: {table: shipment_line, field: shpqty}
+      sales_order_number: {table: shipment_line, field: ordnum}
+    duplicate_risks: []
+  inventory:
+    anchor: invdtl
+    grain: One row per inventory detail (aggregate to part/location/status)
+    model_type: Periodic snapshot fact
+    business_key: [dtlnum]
+    tables: [invdtl, invsub, invlod, prtmst]
+    field_overrides:
+      material: {table: invdtl, field: prtnum}
+      warehouse: {table: invlod, field: wh_id}
+    duplicate_risks: []
+  inventory_movement:
+    anchor: dlytrn
+    grain: One row per daily transaction
+    model_type: Transaction fact
+    business_key: [dlytrn_id]
+    tables: [dlytrn]
+    field_overrides:
+      material: {table: dlytrn, field: prtnum}
+      warehouse: {table: dlytrn, field: wh_id}
+      sales_order_number: {table: dlytrn, field: ordnum}
+      shipment_number: {table: dlytrn, field: ship_id}
+    duplicate_risks: ["dlytrn is often purged/archived after N days - historical loads must persist it in Snowflake."]
+
+transactions:
+  "Shipment Maintenance":
+    description: Shipment maintenance / shipment operations screen
+    type: standard
+    business_object: shipment
+    tables: [shipment, shipment_line, stop, car_move, trlr]
+  "Order Maintenance":
+    description: Outbound order maintenance
+    type: standard
+    business_object: sales_order
+    tables: [ord, ord_line]

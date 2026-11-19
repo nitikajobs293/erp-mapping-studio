@@ -1,0 +1,321 @@
+erp:
+  id: d365_scm
+  name: Microsoft Dynamics 365 Finance & Supply Chain
+  vendor: Microsoft
+  family: Dynamics
+  versions: ["D365 F&SCM 10.0.x"]
+  storage: mixed
+  aliases: [d365, dynamics, dynamics 365, d365fo, d365 scm, ax, dynamics ax]
+  date_type: DATE
+  company_column: DATAAREAID
+  notes: >
+    D365 F&SCM tables are company-specific via DATAAREAID (always include it in joins) and have
+    RECID / RECVERSION / PARTITION technical columns. Inventory dimensions (site, warehouse, location, batch,
+    serial) are normalised into INVENTDIM via INVENTDIMID. Data usually reaches Snowflake through Synapse Link /
+    Fabric link / BYOD exports (column names may be lower-case) or OData data entities
+    (SalesOrderHeadersV2, SalesOrderLines, ...). Advanced WMS uses WHS* tables (loads, shipments, work).
+  source_refs:
+    - "Microsoft Learn - Dynamics 365 F&SCM table reference / data entities"
+
+tables:
+  SALESTABLE:
+    description: Sales Order Header
+    module: Sales and marketing
+    primary_key: [DATAAREAID, SALESID]
+    confidence: standard
+    role: Sales order header.
+    fields:
+      DATAAREAID: {description: Legal entity, type: VARCHAR(4)}
+      SALESID: {description: Sales order, type: VARCHAR(20)}
+      SALESTYPE: {description: Order type (Sales, ReturnItem, ...), type: INT}
+      SALESSTATUS: {description: "Status: 1 Open order, 2 Delivered, 3 Invoiced, 4 Canceled", type: INT}
+      CUSTACCOUNT: {description: Customer account, type: VARCHAR(20)}
+      INVOICEACCOUNT: {description: Invoice account, type: VARCHAR(20)}
+      DELIVERYNAME: {description: Delivery name, type: VARCHAR(100)}
+      SHIPPINGDATEREQUESTED: {description: Requested ship date, type: DATE}
+      RECEIPTDATEREQUESTED: {description: Requested receipt date, type: DATE}
+      DLVMODE: {description: Mode of delivery, type: VARCHAR(10)}
+      CURRENCYCODE: {description: Currency, type: VARCHAR(3)}
+      CREATEDDATETIME: {description: Created, type: TIMESTAMP}
+      MODIFIEDDATETIME: {description: Modified, type: TIMESTAMP}
+  SALESLINE:
+    description: Sales Order Line
+    module: Sales and marketing
+    primary_key: [DATAAREAID, INVENTTRANSID]
+    confidence: standard
+    role: Sales order lines. INVENTTRANSID (lot id) links to inventory transactions and packing slips.
+    fields:
+      DATAAREAID: {description: Legal entity, type: VARCHAR(4)}
+      SALESID: {description: Sales order, type: VARCHAR(20)}
+      LINENUM: {description: Line number, type: NUMBER}
+      INVENTTRANSID: {description: Lot id, type: VARCHAR(20)}
+      ITEMID: {description: Item, type: VARCHAR(20)}
+      NAME: {description: Text, type: VARCHAR(1000)}
+      SALESQTY: {description: Ordered quantity, type: NUMBER}
+      REMAINSALESPHYSICAL: {description: Deliver remainder, type: NUMBER}
+      SALESUNIT: {description: Unit, type: VARCHAR(10)}
+      LINEAMOUNT: {description: Net amount, type: NUMBER}
+      CURRENCYCODE: {description: Currency, type: VARCHAR(3)}
+      SALESSTATUS: {description: Line status, type: INT}
+      INVENTDIMID: {description: Inventory dimension id, type: VARCHAR(20)}
+      SHIPPINGDATEREQUESTED: {description: Requested ship date, type: DATE}
+      SHIPPINGDATECONFIRMED: {description: Confirmed ship date, type: DATE}
+      DLVMODE: {description: Mode of delivery, type: VARCHAR(10)}
+  CUSTPACKINGSLIPJOUR:
+    description: Packing Slip Journal Header (posted delivery)
+    module: Sales and marketing
+    primary_key: [DATAAREAID, RECID]
+    confidence: standard
+    role: Posted packing slip (product receipt) header = delivery note.
+    fields:
+      DATAAREAID: {description: Legal entity, type: VARCHAR(4)}
+      RECID: {description: Record id, type: NUMBER}
+      PACKINGSLIPID: {description: Packing slip number, type: VARCHAR(20)}
+      SALESID: {description: Sales order, type: VARCHAR(20)}
+      DELIVERYDATE: {description: Delivery (posting) date, type: DATE}
+      ORDERACCOUNT: {description: Customer, type: VARCHAR(20)}
+      DLVMODE: {description: Mode of delivery, type: VARCHAR(10)}
+  CUSTPACKINGSLIPTRANS:
+    description: Packing Slip Journal Lines
+    module: Sales and marketing
+    primary_key: [DATAAREAID, RECID]
+    confidence: standard
+    role: Posted packing slip lines - shipped quantity per sales line.
+    fields:
+      DATAAREAID: {description: Legal entity, type: VARCHAR(4)}
+      RECID: {description: Record id, type: NUMBER}
+      PACKINGSLIPID: {description: Packing slip number, type: VARCHAR(20)}
+      SALESID: {description: Sales order, type: VARCHAR(20)}
+      INVENTTRANSID: {description: Lot id of sales line, type: VARCHAR(20)}
+      ITEMID: {description: Item, type: VARCHAR(20)}
+      QTY: {description: Quantity delivered, type: NUMBER}
+      DELIVERYDATE: {description: Delivery date, type: DATE}
+      INVENTDIMID: {description: Inventory dimension, type: VARCHAR(20)}
+  WHSSHIPMENTTABLE:
+    description: Warehouse Shipment (Advanced WMS)
+    module: Warehouse management
+    primary_key: [DATAAREAID, SHIPMENTID]
+    confidence: inferred
+    role: Outbound shipment in advanced warehousing.
+    fields:
+      DATAAREAID: {description: Legal entity, type: VARCHAR(4)}
+      SHIPMENTID: {description: Shipment id, type: VARCHAR(20)}
+      LOADID: {description: Load, type: VARCHAR(20)}
+      SHIPMENTSTATUS: {description: Shipment status, type: INT}
+      CARRIERCODE: {description: Carrier, type: VARCHAR(20)}
+      MODECODE: {description: Mode, type: VARCHAR(20)}
+      INVENTLOCATIONID: {description: Warehouse, type: VARCHAR(10)}
+      ORDERNUM: {description: Order number, type: VARCHAR(20)}
+      BILLOFLADINGID: {description: Bill of lading, type: VARCHAR(20)}
+  WHSLOADLINE:
+    description: Load Line
+    module: Warehouse management
+    primary_key: [DATAAREAID, RECID]
+    confidence: inferred
+    role: Order lines on a load / shipment.
+    fields:
+      DATAAREAID: {description: Legal entity, type: VARCHAR(4)}
+      RECID: {description: Record id, type: NUMBER}
+      LOADID: {description: Load, type: VARCHAR(20)}
+      SHIPMENTID: {description: Shipment, type: VARCHAR(20)}
+      ORDERNUM: {description: Order number, type: VARCHAR(20)}
+      INVENTTRANSID: {description: Lot id of order line, type: VARCHAR(20)}
+      ITEMID: {description: Item, type: VARCHAR(20)}
+      QTY: {description: Quantity, type: NUMBER}
+      PICKEDQTY: {description: Picked quantity, type: NUMBER}
+  INVENTDIM:
+    description: Inventory Dimensions
+    module: Inventory management
+    primary_key: [DATAAREAID, INVENTDIMID]
+    confidence: standard
+    role: Combination of site, warehouse, location, batch, serial etc.
+    fields:
+      DATAAREAID: {description: Legal entity, type: VARCHAR(4)}
+      INVENTDIMID: {description: Dimension id, type: VARCHAR(20)}
+      INVENTSITEID: {description: Site, type: VARCHAR(10)}
+      INVENTLOCATIONID: {description: Warehouse, type: VARCHAR(10)}
+      WMSLOCATIONID: {description: Location, type: VARCHAR(20)}
+      INVENTBATCHID: {description: Batch, type: VARCHAR(20)}
+      INVENTSERIALID: {description: Serial, type: VARCHAR(20)}
+      LICENSEPLATEID: {description: License plate, type: VARCHAR(20)}
+      INVENTSTATUSID: {description: Inventory status, type: VARCHAR(10)}
+  INVENTSUM:
+    description: On-hand Inventory
+    module: Inventory management
+    primary_key: [DATAAREAID, ITEMID, INVENTDIMID]
+    confidence: standard
+    role: On-hand quantities per item and inventory dimension.
+    fields:
+      DATAAREAID: {description: Legal entity, type: VARCHAR(4)}
+      ITEMID: {description: Item, type: VARCHAR(20)}
+      INVENTDIMID: {description: Dimension, type: VARCHAR(20)}
+      PHYSICALINVENT: {description: Physical inventory, type: NUMBER}
+      AVAILPHYSICAL: {description: Available physical, type: NUMBER}
+      RESERVPHYSICAL: {description: Physical reserved, type: NUMBER}
+      CLOSED: {description: Closed flag, type: INT}
+  INVENTTRANS:
+    description: Inventory Transactions
+    module: Inventory management
+    primary_key: [DATAAREAID, RECID]
+    confidence: standard
+    role: Every inventory transaction; origin via INVENTTRANSORIGIN.
+    fields:
+      DATAAREAID: {description: Legal entity, type: VARCHAR(4)}
+      RECID: {description: Record id, type: NUMBER}
+      INVENTTRANSORIGIN: {description: Origin RecId, type: NUMBER}
+      ITEMID: {description: Item, type: VARCHAR(20)}
+      QTY: {description: Quantity (signed), type: NUMBER}
+      STATUSISSUE: {description: Issue status, type: INT}
+      STATUSRECEIPT: {description: Receipt status, type: INT}
+      DATEPHYSICAL: {description: Physical date, type: DATE}
+      INVENTDIMID: {description: Dimension, type: VARCHAR(20)}
+      PACKINGSLIPID: {description: Packing slip, type: VARCHAR(20)}
+  INVENTTRANSORIGIN:
+    description: Inventory Transaction Origin
+    module: Inventory management
+    primary_key: [DATAAREAID, RECID]
+    confidence: standard
+    role: Source document of inventory transactions (sales line lot id, PO line, ...).
+    fields:
+      DATAAREAID: {description: Legal entity, type: VARCHAR(4)}
+      RECID: {description: Record id, type: NUMBER}
+      INVENTTRANSID: {description: Lot id, type: VARCHAR(20)}
+      REFERENCEID: {description: Reference document (e.g. sales order), type: VARCHAR(20)}
+      REFERENCECATEGORY: {description: Reference type (0 = sales order ...), type: INT}
+  CUSTTABLE:
+    description: Customers
+    module: Accounts receivable
+    primary_key: [DATAAREAID, ACCOUNTNUM]
+    confidence: standard
+    role: Customer account; name via DIRPARTYTABLE (PARTY).
+    fields:
+      DATAAREAID: {description: Legal entity, type: VARCHAR(4)}
+      ACCOUNTNUM: {description: Customer account, type: VARCHAR(20)}
+      PARTY: {description: Party RecId, type: NUMBER}
+  DIRPARTYTABLE:
+    description: Global Address Book Party
+    module: Global address book
+    primary_key: [RECID]
+    confidence: standard
+    role: Party name (shared across companies).
+    fields:
+      RECID: {description: Record id, type: NUMBER}
+      NAME: {description: Name, type: VARCHAR(100)}
+
+relationships:
+  - {from: SALESTABLE, to: SALESLINE, on: [[DATAAREAID, DATAAREAID], [SALESID, SALESID]], cardinality: "1:N", confidence: standard}
+  - {from: SALESLINE, to: INVENTDIM, on: [[DATAAREAID, DATAAREAID], [INVENTDIMID, INVENTDIMID]], cardinality: "N:1", confidence: standard}
+  - {from: SALESTABLE, to: CUSTTABLE, on: [[DATAAREAID, DATAAREAID], [CUSTACCOUNT, ACCOUNTNUM]], cardinality: "N:1", confidence: standard}
+  - {from: CUSTTABLE, to: DIRPARTYTABLE, on: [[PARTY, RECID]], cardinality: "N:1", confidence: standard}
+  - {from: SALESLINE, to: CUSTPACKINGSLIPTRANS, on: [[DATAAREAID, DATAAREAID], [INVENTTRANSID, INVENTTRANSID]], cardinality: "1:N", confidence: standard}
+  - {from: CUSTPACKINGSLIPJOUR, to: CUSTPACKINGSLIPTRANS, on: [[DATAAREAID, DATAAREAID], [PACKINGSLIPID, PACKINGSLIPID], [SALESID, SALESID]], cardinality: "1:N", confidence: inferred, note: "Packing slip id may repeat across orders; journal RecId-based link (via SourceDocument) is safer - validate"}
+  - {from: SALESLINE, to: WHSLOADLINE, on: [[DATAAREAID, DATAAREAID], [INVENTTRANSID, INVENTTRANSID]], cardinality: "1:N", confidence: inferred}
+  - {from: WHSSHIPMENTTABLE, to: WHSLOADLINE, on: [[DATAAREAID, DATAAREAID], [SHIPMENTID, SHIPMENTID]], cardinality: "1:N", confidence: inferred}
+  - {from: INVENTSUM, to: INVENTDIM, on: [[DATAAREAID, DATAAREAID], [INVENTDIMID, INVENTDIMID]], cardinality: "N:1", confidence: standard}
+  - {from: INVENTTRANS, to: INVENTDIM, on: [[DATAAREAID, DATAAREAID], [INVENTDIMID, INVENTDIMID]], cardinality: "N:1", confidence: standard}
+  - {from: INVENTTRANS, to: INVENTTRANSORIGIN, on: [[DATAAREAID, DATAAREAID], [INVENTTRANSORIGIN, RECID]], cardinality: "N:1", confidence: standard}
+
+concepts:
+  sales_order_number:   {table: SALESTABLE, field: SALESID, confidence: standard}
+  sales_order_item:     {table: SALESLINE, field: LINENUM, confidence: standard}
+  sales_order_type:     {table: SALESTABLE, field: SALESTYPE, confidence: standard}
+  order_date:           {expr: "TO_DATE({SALESTABLE.CREATEDDATETIME})", confidence: inferred}
+  customer:             {table: SALESTABLE, field: CUSTACCOUNT, confidence: standard}
+  customer_name:        {table: DIRPARTYTABLE, field: NAME, confidence: standard}
+  ship_to:              {table: SALESTABLE, field: DELIVERYNAME, confidence: inferred, note: "Delivery address is a postal address record (DELIVERYPOSTALADDRESS -> LOGISTICSPOSTALADDRESS)"}
+  sales_org:            {table: SALESTABLE, field: DATAAREAID, confidence: inferred, note: "Legal entity"}
+  material:             {table: SALESLINE, field: ITEMID, confidence: standard}
+  material_description: {table: SALESLINE, field: NAME, confidence: standard}
+  order_quantity:       {table: SALESLINE, field: SALESQTY, confidence: standard}
+  open_quantity:        {table: SALESLINE, field: REMAINSALESPHYSICAL, confidence: standard}
+  sales_uom:            {table: SALESLINE, field: SALESUNIT, confidence: standard}
+  requested_delivery_date: {table: SALESLINE, field: SHIPPINGDATEREQUESTED, confidence: standard}
+  order_status:         {table: SALESLINE, field: SALESSTATUS, confidence: standard}
+  net_value:            {table: SALESLINE, field: LINEAMOUNT, confidence: standard}
+  currency:             {table: SALESLINE, field: CURRENCYCODE, confidence: standard}
+  plant:                {table: INVENTDIM, field: INVENTSITEID, confidence: standard}
+  warehouse:            {table: INVENTDIM, field: INVENTLOCATIONID, confidence: standard}
+  storage_location:     {table: INVENTDIM, field: WMSLOCATIONID, confidence: standard}
+  batch:                {table: INVENTDIM, field: INVENTBATCHID, confidence: standard}
+  serial_number:        {table: INVENTDIM, field: INVENTSERIALID, confidence: standard}
+  delivery_number:      {table: CUSTPACKINGSLIPTRANS, field: PACKINGSLIPID, confidence: standard}
+  delivery_quantity:    {table: CUSTPACKINGSLIPTRANS, field: QTY, confidence: standard}
+  shipped_quantity:     {table: CUSTPACKINGSLIPTRANS, field: QTY, confidence: standard}
+  actual_goods_issue_date: {table: CUSTPACKINGSLIPTRANS, field: DELIVERYDATE, confidence: standard}
+  transport_mode:       {table: SALESTABLE, field: DLVMODE, confidence: standard}
+  shipment_number:      {table: WHSSHIPMENTTABLE, field: SHIPMENTID, confidence: inferred}
+  shipment_status:      {table: WHSSHIPMENTTABLE, field: SHIPMENTSTATUS, confidence: inferred}
+  carrier:              {table: WHSSHIPMENTTABLE, field: CARRIERCODE, confidence: inferred}
+  tracking_number:      {table: WHSSHIPMENTTABLE, field: BILLOFLADINGID, confidence: validate}
+  handling_unit:        {table: INVENTDIM, field: LICENSEPLATEID, confidence: standard}
+  stock_unrestricted:   {table: INVENTSUM, field: PHYSICALINVENT, confidence: standard}
+  stock_available:      {table: INVENTSUM, field: AVAILPHYSICAL, confidence: standard}
+  stock_blocked:        {table: INVENTDIM, field: INVENTSTATUSID, confidence: validate, note: "Blocking is via inventory status (INVENTSTATUSID) - filter blocking statuses"}
+  movement_date:        {table: INVENTTRANS, field: DATEPHYSICAL, confidence: standard}
+  movement_quantity:    {table: INVENTTRANS, field: QTY, confidence: standard}
+  movement_type:        {table: INVENTTRANSORIGIN, field: REFERENCECATEGORY, confidence: standard}
+  material_document:    {table: INVENTTRANSORIGIN, field: REFERENCEID, confidence: inferred}
+
+business_objects:
+  sales_order:
+    anchor: SALESLINE
+    header: SALESTABLE
+    grain: One row per sales line (DATAAREAID + INVENTTRANSID)
+    model_type: Header/item transaction fact
+    business_key: [DATAAREAID, SALESID, LINENUM]
+    tables: [SALESTABLE, SALESLINE, INVENTDIM, CUSTTABLE, DIRPARTYTABLE]
+    duplicate_risks: ["Synapse Link exports include soft-deleted rows (IsDelete) - filter them."]
+  delivery:
+    anchor: CUSTPACKINGSLIPTRANS
+    header: CUSTPACKINGSLIPJOUR
+    grain: One row per posted packing slip line
+    model_type: Header/item transaction fact
+    business_key: [DATAAREAID, RECID]
+    tables: [CUSTPACKINGSLIPJOUR, CUSTPACKINGSLIPTRANS, SALESLINE, INVENTDIM]
+    field_overrides:
+      material: {table: CUSTPACKINGSLIPTRANS, field: ITEMID}
+      sales_order_number: {table: CUSTPACKINGSLIPTRANS, field: SALESID}
+    duplicate_risks: ["Packing slip corrections/cancellations create additional lines with negative quantity - net them."]
+  shipment:
+    anchor: WHSLOADLINE
+    header: WHSSHIPMENTTABLE
+    grain: One row per load line
+    model_type: Bridge + accumulating snapshot
+    business_key: [DATAAREAID, RECID]
+    tables: [WHSSHIPMENTTABLE, WHSLOADLINE, SALESLINE]
+    field_overrides:
+      material: {table: WHSLOADLINE, field: ITEMID}
+      sales_order_number: {table: WHSLOADLINE, field: ORDERNUM}
+      shipped_quantity: {table: WHSLOADLINE, field: PICKEDQTY}
+    duplicate_risks: []
+  inventory:
+    anchor: INVENTSUM
+    grain: One row per item + inventory dimension combination
+    model_type: Periodic snapshot fact
+    business_key: [DATAAREAID, ITEMID, INVENTDIMID]
+    base_filter: "{INVENTSUM}.CLOSED = 0"
+    tables: [INVENTSUM, INVENTDIM]
+    field_overrides:
+      material: {table: INVENTSUM, field: ITEMID}
+    duplicate_risks: []
+  inventory_movement:
+    anchor: INVENTTRANS
+    grain: One row per inventory transaction
+    model_type: Transaction fact
+    business_key: [DATAAREAID, RECID]
+    tables: [INVENTTRANS, INVENTTRANSORIGIN, INVENTDIM]
+    field_overrides:
+      material: {table: INVENTTRANS, field: ITEMID}
+    duplicate_risks: ["Inventory transactions are split when partially updated - not duplicates."]
+
+transactions:
+  SalesTableListPage:
+    description: All sales orders (menu item)
+    type: standard
+    business_object: sales_order
+    tables: [SALESTABLE, SALESLINE]
+  WHSShipmentDetails:
+    description: Shipment details (advanced WMS)
+    type: standard
+    business_object: shipment
+    tables: [WHSSHIPMENTTABLE, WHSLOADLINE]

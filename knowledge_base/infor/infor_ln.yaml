@@ -1,0 +1,143 @@
+erp:
+  id: infor_ln
+  name: Infor LN (Baan)
+  vendor: Infor
+  family: Infor
+  versions: ["LN 10.x", "LN CloudSuite"]
+  storage: relational
+  aliases: [ln, infor ln, baan]
+  date_type: DATE
+  physical_name_template: "t{table}{company}"
+  template_params: {company: "100"}
+  notes: >
+    Infor LN tables are named <package><module><table number> (e.g. tdsls400 = sales order header) and
+    physically suffixed with the company number (ttdsls400100). Columns are prefixed t_ (t_orno, t_pono).
+    Shipments live in the Warehousing package (whinh430 / whinh431).
+  source_refs:
+    - "Infor LN table definitions (Data Dictionary) - validate in your release"
+
+tables:
+  tdsls400:
+    description: Sales Order Header
+    module: Sales (tdsls)
+    primary_key: [t_orno]
+    confidence: inferred
+    role: Sales order header.
+    fields:
+      t_orno: {description: Sales order, type: VARCHAR(9)}
+      t_ofbp: {description: Sold-to business partner, type: VARCHAR(9)}
+      t_stbp: {description: Ship-to business partner, type: VARCHAR(9)}
+      t_odat: {description: Order date, type: TIMESTAMP}
+      t_hdst: {description: Header status, type: NUMBER}
+      t_ccur: {description: Currency, type: VARCHAR(3)}
+  tdsls401:
+    description: Sales Order Lines
+    module: Sales (tdsls)
+    primary_key: [t_orno, t_pono, t_sqnb]
+    confidence: inferred
+    role: Sales order lines.
+    fields:
+      t_orno: {description: Sales order, type: VARCHAR(9)}
+      t_pono: {description: Position, type: NUMBER}
+      t_sqnb: {description: Sequence, type: NUMBER}
+      t_item: {description: Item, type: VARCHAR(47)}
+      t_cwar: {description: Warehouse, type: VARCHAR(6)}
+      t_qoor: {description: Ordered quantity, type: NUMBER}
+      t_dqua: {description: Delivered quantity, type: NUMBER}
+      t_ddta: {description: Planned delivery date, type: TIMESTAMP}
+      t_oamt: {description: Order amount, type: NUMBER}
+  whinh430:
+    description: Shipments
+    module: Warehousing (whinh)
+    primary_key: [t_shpm]
+    confidence: inferred
+    role: Outbound shipment header.
+    fields:
+      t_shpm: {description: Shipment, type: VARCHAR(9)}
+      t_cfrw: {description: Carrier, type: VARCHAR(3)}
+      t_stat: {description: Status, type: NUMBER}
+      t_cnfd: {description: Confirmed (ship) date, type: TIMESTAMP}
+  whinh431:
+    description: Shipment Lines
+    module: Warehousing (whinh)
+    primary_key: [t_shpm, t_pono]
+    confidence: inferred
+    role: Shipment lines referencing the source order.
+    fields:
+      t_shpm: {description: Shipment, type: VARCHAR(9)}
+      t_pono: {description: Line, type: NUMBER}
+      t_worn: {description: Order (source), type: VARCHAR(9)}
+      t_wpon: {description: Order line, type: NUMBER}
+      t_item: {description: Item, type: VARCHAR(47)}
+      t_qshp: {description: Shipped quantity, type: NUMBER}
+  tcibd001:
+    description: Item General
+    module: Common (tcibd)
+    primary_key: [t_item]
+    confidence: inferred
+    role: Item master.
+    fields:
+      t_item: {description: Item, type: VARCHAR(47)}
+      t_dsca: {description: Description, type: VARCHAR(30)}
+
+relationships:
+  - {from: tdsls400, to: tdsls401, on: [[t_orno, t_orno]], cardinality: "1:N", confidence: inferred}
+  - {from: tdsls401, to: tcibd001, on: [[t_item, t_item]], cardinality: "N:1", confidence: inferred}
+  - {from: tdsls401, to: whinh431, on: [[t_orno, t_worn], [t_pono, t_wpon]], cardinality: "1:N", confidence: validate, note: "Also filter order origin (t_worg = sales) - validate"}
+  - {from: whinh430, to: whinh431, on: [[t_shpm, t_shpm]], cardinality: "1:N", confidence: inferred}
+
+concepts:
+  sales_order_number:   {table: tdsls400, field: t_orno, confidence: inferred}
+  sales_order_item:     {table: tdsls401, field: t_pono, confidence: inferred}
+  order_date:           {table: tdsls400, field: t_odat, confidence: inferred}
+  customer:             {table: tdsls400, field: t_ofbp, confidence: inferred}
+  ship_to:              {table: tdsls400, field: t_stbp, confidence: inferred}
+  material:             {table: tdsls401, field: t_item, confidence: inferred}
+  material_description: {table: tcibd001, field: t_dsca, confidence: inferred}
+  order_quantity:       {table: tdsls401, field: t_qoor, confidence: inferred}
+  shipped_quantity:     {table: tdsls401, field: t_dqua, confidence: inferred}
+  open_quantity:        {expr: "{tdsls401.t_qoor} - {tdsls401.t_dqua}", confidence: inferred}
+  planned_delivery_date: {table: tdsls401, field: t_ddta, confidence: inferred}
+  order_status:         {table: tdsls400, field: t_hdst, confidence: inferred}
+  net_value:            {table: tdsls401, field: t_oamt, confidence: inferred}
+  currency:             {table: tdsls400, field: t_ccur, confidence: inferred}
+  warehouse:            {table: tdsls401, field: t_cwar, confidence: inferred}
+  shipment_number:      {table: whinh430, field: t_shpm, confidence: inferred}
+  carrier:              {table: whinh430, field: t_cfrw, confidence: inferred}
+  shipment_status:      {table: whinh430, field: t_stat, confidence: inferred}
+  actual_goods_issue_date: {table: whinh430, field: t_cnfd, confidence: validate}
+
+business_objects:
+  sales_order:
+    anchor: tdsls401
+    header: tdsls400
+    grain: One row per sales order line + sequence
+    model_type: Header/item transaction fact
+    business_key: [t_orno, t_pono, t_sqnb]
+    tables: [tdsls400, tdsls401, tcibd001]
+    duplicate_risks: ["Sequence (t_sqnb) holds delivery/backorder sub-lines - decide whether to report position or sequence grain."]
+  shipment:
+    anchor: whinh431
+    header: whinh430
+    grain: One row per shipment line
+    model_type: Header/item transaction fact
+    business_key: [t_shpm, t_pono]
+    tables: [whinh430, whinh431, tdsls401]
+    field_overrides:
+      material: {table: whinh431, field: t_item}
+      sales_order_number: {table: whinh431, field: t_worn}
+      sales_order_item: {table: whinh431, field: t_wpon}
+      shipped_quantity: {table: whinh431, field: t_qshp}
+    duplicate_risks: []
+
+transactions:
+  tdsls4100m000:
+    description: Sales Orders (session)
+    type: standard
+    business_object: sales_order
+    tables: [tdsls400, tdsls401]
+  whinh4130m000:
+    description: Shipments (session)
+    type: standard
+    business_object: shipment
+    tables: [whinh430, whinh431]

@@ -1,0 +1,125 @@
+erp:
+  id: koerber_wms
+  name: Körber WMS (HighJump)
+  vendor: Körber Supply Chain
+  family: Körber
+  versions: ["Körber WMS (HighJump) Advantage", "Körber One"]
+  storage: customer_specific
+  aliases: [korber, koerber, körber, highjump, high jump]
+  date_type: DATE
+  notes: >
+    Körber (formerly HighJump) Advantage WMS runs on SQL Server with t_-prefixed tables (t_order,
+    t_order_detail, t_pick_detail, t_stored_item, t_tran_log, t_item_master). Installations are heavily
+    customised; every mapping here is inferred and must be confirmed against your instance (upload your
+    table/column inventory to promote mappings to 'confirmed').
+  source_refs:
+    - "Körber/HighJump database documentation for your installation - validate"
+
+tables:
+  t_order:
+    description: Outbound Order Header
+    module: Outbound
+    primary_key: [wh_id, order_number]
+    confidence: validate
+    role: Outbound order header.
+    fields:
+      wh_id: {description: Warehouse, type: VARCHAR}
+      order_number: {description: Order number, type: VARCHAR}
+      customer_id: {description: Customer, type: VARCHAR}
+      status: {description: Status, type: VARCHAR}
+      carrier: {description: Carrier, type: VARCHAR}
+      ship_date: {description: Ship date, type: DATETIME}
+  t_order_detail:
+    description: Outbound Order Line
+    module: Outbound
+    primary_key: [wh_id, order_number, line_number]
+    confidence: validate
+    role: Order lines.
+    fields:
+      wh_id: {description: Warehouse, type: VARCHAR}
+      order_number: {description: Order number, type: VARCHAR}
+      line_number: {description: Line, type: VARCHAR}
+      item_number: {description: Item, type: VARCHAR}
+      qty: {description: Ordered quantity, type: NUMBER}
+      qty_shipped: {description: Shipped quantity, type: NUMBER}
+  t_stored_item:
+    description: Stored Inventory
+    module: Inventory
+    primary_key: [sto_id]
+    confidence: validate
+    role: Inventory by item / location / lot.
+    fields:
+      sto_id: {description: Id, type: NUMBER}
+      wh_id: {description: Warehouse, type: VARCHAR}
+      item_number: {description: Item, type: VARCHAR}
+      location_id: {description: Location, type: VARCHAR}
+      lot_number: {description: Lot, type: VARCHAR}
+      actual_qty: {description: Quantity, type: NUMBER}
+      status: {description: Inventory status, type: VARCHAR}
+  t_tran_log:
+    description: Transaction Log
+    module: History
+    primary_key: [tran_log_id]
+    confidence: validate
+    role: Transaction history (picks, moves, ships, adjustments).
+    fields:
+      tran_log_id: {description: Id, type: NUMBER}
+      tran_type: {description: Transaction type, type: VARCHAR}
+      start_tran_date: {description: Transaction date, type: DATETIME}
+      item_number: {description: Item, type: VARCHAR}
+      tran_qty: {description: Quantity, type: NUMBER}
+      control_number: {description: Order / control number, type: VARCHAR}
+      wh_id: {description: Warehouse, type: VARCHAR}
+
+relationships:
+  - {from: t_order, to: t_order_detail, on: [[wh_id, wh_id], [order_number, order_number]], cardinality: "1:N", confidence: validate}
+
+concepts:
+  sales_order_number:   {table: t_order, field: order_number, confidence: validate}
+  sales_order_item:     {table: t_order_detail, field: line_number, confidence: validate}
+  customer:             {table: t_order, field: customer_id, confidence: validate}
+  order_status:         {table: t_order, field: status, confidence: validate}
+  carrier:              {table: t_order, field: carrier, confidence: validate}
+  actual_goods_issue_date: {table: t_order, field: ship_date, confidence: validate}
+  material:             {table: t_order_detail, field: item_number, confidence: validate}
+  order_quantity:       {table: t_order_detail, field: qty, confidence: validate}
+  shipped_quantity:     {table: t_order_detail, field: qty_shipped, confidence: validate}
+  warehouse:            {table: t_order, field: wh_id, confidence: validate}
+  stock_unrestricted:   {table: t_stored_item, field: actual_qty, confidence: validate}
+  storage_location:     {table: t_stored_item, field: location_id, confidence: validate}
+  batch:                {table: t_stored_item, field: lot_number, confidence: validate}
+  movement_type:        {table: t_tran_log, field: tran_type, confidence: validate}
+  movement_date:        {table: t_tran_log, field: start_tran_date, confidence: validate}
+  movement_quantity:    {table: t_tran_log, field: tran_qty, confidence: validate}
+
+business_objects:
+  sales_order:
+    anchor: t_order_detail
+    header: t_order
+    grain: One row per order line per warehouse
+    model_type: Header/item transaction fact
+    business_key: [wh_id, order_number, line_number]
+    tables: [t_order, t_order_detail]
+    duplicate_risks: []
+  inventory:
+    anchor: t_stored_item
+    grain: One row per stored item record
+    model_type: Periodic snapshot fact
+    business_key: [sto_id]
+    tables: [t_stored_item]
+    field_overrides:
+      material: {table: t_stored_item, field: item_number}
+      warehouse: {table: t_stored_item, field: wh_id}
+    duplicate_risks: []
+  inventory_movement:
+    anchor: t_tran_log
+    grain: One row per transaction log entry
+    model_type: Transaction fact
+    business_key: [tran_log_id]
+    tables: [t_tran_log]
+    field_overrides:
+      material: {table: t_tran_log, field: item_number}
+      warehouse: {table: t_tran_log, field: wh_id}
+    duplicate_risks: []
+
+transactions: {}

@@ -1,0 +1,970 @@
+# Shared SAP (ECC + S/4HANA) logistics data dictionary.
+# Not loaded as an ERP on its own (abstract: true) - sap_ecc.yaml and sap_s4hana.yaml inherit it.
+# Confidence levels: standard | uploaded | inferred | validate
+erp:
+  id: sap_common
+  abstract: true
+  family: SAP
+  storage: relational
+  client_column: MANDT
+  date_type: DATS          # SAP DATS = CHAR(8) YYYYMMDD; '00000000' = empty
+  source_refs:
+    - "SAP data dictionary (SE11 / DD02L, DD03L) - verify in your system"
+    - "SAP Help Portal - SD/LE/MM data model documentation"
+
+tables:
+  VBAK:
+    description: Sales Document Header
+    module: SD
+    primary_key: [MANDT, VBELN]
+    confidence: standard
+    role: Header of every SD sales document (orders, quotations, returns, contracts). Filter by VBTYP / AUART for the document category you need.
+    fields:
+      VBELN: {description: Sales document number, type: CHAR(10)}
+      AUART: {description: Sales document type, type: CHAR(4)}
+      VBTYP: {description: SD document category (C=order, H=returns, ...), type: CHAR(1)}
+      ERDAT: {description: Created on, type: DATS}
+      ERZET: {description: Created at time, type: TIMS}
+      AEDAT: {description: Last changed on, type: DATS}
+      AUDAT: {description: Document date, type: DATS}
+      VDATU: {description: Requested delivery date (header), type: DATS}
+      VKORG: {description: Sales organization, type: CHAR(4)}
+      VTWEG: {description: Distribution channel, type: CHAR(2)}
+      SPART: {description: Division, type: CHAR(2)}
+      KUNNR: {description: Sold-to party, type: CHAR(10)}
+      NETWR: {description: Net value (document currency), type: CURR}
+      WAERK: {description: Document currency, type: CUKY}
+      BSTNK: {description: Customer purchase order number, type: CHAR(20)}
+  VBAP:
+    description: Sales Document Item
+    module: SD
+    primary_key: [MANDT, VBELN, POSNR]
+    confidence: standard
+    role: Item level of sales documents - material, ordered quantity, plant, rejection reason.
+    fields:
+      VBELN: {description: Sales document number, type: CHAR(10)}
+      POSNR: {description: Sales document item, type: NUMC(6)}
+      MATNR: {description: Material number, type: CHAR(40)}
+      ARKTX: {description: Item short text, type: CHAR(40)}
+      PSTYV: {description: Item category, type: CHAR(4)}
+      KWMENG: {description: Cumulative order quantity (sales unit), type: QUAN}
+      VRKME: {description: Sales unit, type: UNIT}
+      NETWR: {description: Net value of item, type: CURR}
+      WAERK: {description: Document currency, type: CUKY}
+      WERKS: {description: Plant, type: CHAR(4)}
+      LGORT: {description: Storage location, type: CHAR(4)}
+      ABGRU: {description: Reason for rejection, type: CHAR(2)}
+      CHARG: {description: Batch, type: CHAR(10)}
+      ERDAT: {description: Created on, type: DATS}
+      AEDAT: {description: Last changed on, type: DATS}
+  VBEP:
+    description: Sales Document Schedule Line
+    module: SD
+    primary_key: [MANDT, VBELN, POSNR, ETENR]
+    confidence: standard
+    role: Schedule lines - requested vs confirmed quantities and dates. Multiple per item.
+    fields:
+      VBELN: {description: Sales document number, type: CHAR(10)}
+      POSNR: {description: Item, type: NUMC(6)}
+      ETENR: {description: Schedule line number, type: NUMC(4)}
+      EDATU: {description: Schedule line date (requested/confirmed), type: DATS}
+      WMENG: {description: Order quantity (sales unit), type: QUAN}
+      BMENG: {description: Confirmed quantity, type: QUAN}
+      MBDAT: {description: Material availability date, type: DATS}
+      WADAT: {description: Goods issue date, type: DATS}
+  VBFA:
+    description: Sales Document Flow
+    module: SD
+    primary_key: [MANDT, VBELV, POSNV, VBELN, POSNN, VBTYP_N]
+    confidence: standard
+    role: Generic predecessor -> successor link between SD documents (order -> delivery -> invoice, delivery -> WMS/material doc). The only generic way to traverse document chains.
+    notes: "In S/4HANA the technical primary key of VBFA changed (RUUID); keep VBELV/POSNV/VBELN/POSNN/VBTYP_N as the business key. Filter on VBTYP_V / VBTYP_N to avoid fan-out."
+    fields:
+      VBELV: {description: Preceding document, type: CHAR(10)}
+      POSNV: {description: Preceding item, type: NUMC(6)}
+      VBELN: {description: Subsequent document, type: CHAR(10)}
+      POSNN: {description: Subsequent item, type: NUMC(6)}
+      VBTYP_V: {description: Category of preceding document, type: CHAR(1)}
+      VBTYP_N: {description: Category of subsequent document (J=delivery, M=invoice, R=goods movement, 8=shipment), type: CHAR(1)}
+      RFMNG: {description: Referenced quantity, type: QUAN}
+      ERDAT: {description: Created on, type: DATS}
+  VBPA:
+    description: Sales Document Partners
+    module: SD
+    primary_key: [MANDT, VBELN, POSNR, PARVW]
+    confidence: standard
+    role: Partner functions per document (AG sold-to, WE ship-to, RE bill-to, SP forwarding agent/carrier). POSNR = '000000' holds header partners.
+    notes: "Internal partner function codes: AG=sold-to, WE=ship-to, RE=bill-to, RG=payer, SP=forwarding agent. Always filter PARVW and POSNR to avoid fan-out."
+    fields:
+      VBELN: {description: SD document number (order, delivery or invoice), type: CHAR(10)}
+      POSNR: {description: Item ('000000' = header), type: NUMC(6)}
+      PARVW: {description: Partner function, type: CHAR(2)}
+      KUNNR: {description: Customer, type: CHAR(10)}
+      LIFNR: {description: Vendor (e.g. forwarding agent), type: CHAR(10)}
+      ADRNR: {description: Address number, type: CHAR(10)}
+  KNA1:
+    description: Customer Master (General Data)
+    module: SD
+    primary_key: [MANDT, KUNNR]
+    confidence: standard
+    role: Customer name, country, address. In S/4HANA customers are Business Partners but KNA1 is still maintained.
+    fields:
+      KUNNR: {description: Customer number, type: CHAR(10)}
+      NAME1: {description: Name 1, type: CHAR(35)}
+      LAND1: {description: Country, type: CHAR(3)}
+      ORT01: {description: City, type: CHAR(35)}
+      PSTLZ: {description: Postal code, type: CHAR(10)}
+  LFA1:
+    description: Vendor / Supplier Master (General Data)
+    module: MM
+    primary_key: [MANDT, LIFNR]
+    confidence: standard
+    role: Suppliers and carriers / forwarding agents.
+    fields:
+      LIFNR: {description: Vendor number, type: CHAR(10)}
+      NAME1: {description: Name, type: CHAR(35)}
+      LAND1: {description: Country, type: CHAR(3)}
+  TVAGT:
+    description: Rejection Reason Texts
+    module: SD
+    primary_key: [MANDT, SPRAS, ABGRU]
+    confidence: standard
+    role: Language-dependent text for VBAP-ABGRU.
+    fields:
+      SPRAS: {description: Language key, type: LANG}
+      ABGRU: {description: Reason for rejection, type: CHAR(2)}
+      BEZEI: {description: Description, type: CHAR(40)}
+  LIKP:
+    description: Delivery Header
+    module: LE-SHP
+    primary_key: [MANDT, VBELN]
+    confidence: standard
+    role: Outbound/inbound delivery header - shipping point, ship-to, planned and actual goods issue dates.
+    fields:
+      VBELN: {description: Delivery number, type: CHAR(10)}
+      LFART: {description: Delivery type, type: CHAR(4)}
+      VBTYP: {description: SD document category (J=outbound delivery, T=returns delivery, 7=inbound), type: CHAR(1)}
+      VSTEL: {description: Shipping point, type: CHAR(4)}
+      VKORG: {description: Sales organization, type: CHAR(4)}
+      KUNNR: {description: Ship-to party, type: CHAR(10)}
+      KUNAG: {description: Sold-to party, type: CHAR(10)}
+      LFDAT: {description: Planned delivery date, type: DATS}
+      WADAT: {description: Planned goods movement date, type: DATS}
+      WADAT_IST: {description: Actual goods movement date, type: DATS}
+      ROUTE: {description: Route, type: CHAR(6)}
+      VSBED: {description: Shipping conditions, type: CHAR(2)}
+      LIFNR: {description: Vendor (inbound) , type: CHAR(10)}
+      LGNUM: {description: Warehouse number, type: CHAR(3)}
+      BTGEW: {description: Total weight, type: QUAN}
+      ERDAT: {description: Created on, type: DATS}
+      AEDAT: {description: Changed on, type: DATS}
+  LIPS:
+    description: Delivery Item
+    module: LE-SHP
+    primary_key: [MANDT, VBELN, POSNR]
+    confidence: standard
+    role: Delivery item - material, quantity, plant/storage location, batch, and reference (VGBEL/VGPOS) to the preceding sales order or STO item.
+    fields:
+      VBELN: {description: Delivery number, type: CHAR(10)}
+      POSNR: {description: Delivery item, type: NUMC(6)}
+      MATNR: {description: Material number, type: CHAR(40)}
+      ARKTX: {description: Item short text, type: CHAR(40)}
+      LFIMG: {description: Actual quantity delivered (sales unit), type: QUAN}
+      VRKME: {description: Sales unit, type: UNIT}
+      LGMNG: {description: Delivered quantity in stockkeeping unit, type: QUAN}
+      MEINS: {description: Base unit of measure, type: UNIT}
+      WERKS: {description: Plant, type: CHAR(4)}
+      LGORT: {description: Storage location, type: CHAR(4)}
+      CHARG: {description: Batch, type: CHAR(10)}
+      VGBEL: {description: Reference document (e.g. sales order), type: CHAR(10)}
+      VGPOS: {description: Reference item, type: NUMC(6)}
+      VGTYP: {description: Reference document category, type: CHAR(1)}
+      PSTYV: {description: Delivery item category, type: CHAR(4)}
+      UECHA: {description: Higher-level item (batch split), type: NUMC(6)}
+      ERDAT: {description: Created on, type: DATS}
+  VTTK:
+    description: Shipment Header (LE-TRA)
+    module: LE-TRA
+    primary_key: [MANDT, TKNUM]
+    confidence: standard
+    role: Shipment document - carrier, shipping type, overall transport status and planned/actual milestone dates.
+    notes: "If your S/4HANA system uses embedded/side-by-side SAP TM, shipments are Freight Orders (/SCMTMS/D_TORROT) instead of VTTK - validate which one is active."
+    fields:
+      TKNUM: {description: Shipment number, type: CHAR(10)}
+      SHTYP: {description: Shipment type, type: CHAR(4)}
+      TPLST: {description: Transportation planning point, type: CHAR(4)}
+      TDLNR: {description: Service agent / carrier (vendor no.), type: CHAR(10)}
+      VSART: {description: Shipping type (transport mode), type: CHAR(2)}
+      ROUTE: {description: Route, type: CHAR(6)}
+      STTRG: {description: Overall transportation status, type: CHAR(1)}
+      EXTI1: {description: External identification 1 (often tracking / BoL), type: CHAR(20)}
+      EXTI2: {description: External identification 2, type: CHAR(20)}
+      SIGNI: {description: Container ID, type: CHAR(20)}
+      DPTBG: {description: Planned date of shipment start, type: DATS}
+      DATBG: {description: Actual date of shipment start, type: DATS}
+      DPTEN: {description: Planned date of shipment completion, type: DATS}
+      DATEN: {description: Actual date of shipment completion, type: DATS}
+      DPLBG: {description: Planned loading start date, type: DATS}
+      DALBG: {description: Actual loading start date, type: DATS}
+      ERDAT: {description: Created on, type: DATS}
+      AEDAT: {description: Changed on, type: DATS}
+  VTTP:
+    description: Shipment Item (shipment -> delivery assignment)
+    module: LE-TRA
+    primary_key: [MANDT, TKNUM, TPNUM]
+    confidence: standard
+    role: Bridge between shipments and deliveries. One shipment has many deliveries; a delivery can be in several shipments (e.g. pre-carriage + main leg).
+    fields:
+      TKNUM: {description: Shipment number, type: CHAR(10)}
+      TPNUM: {description: Shipment item, type: NUMC(4)}
+      VBELN: {description: Delivery number, type: CHAR(10)}
+      TPRFO: {description: Sequence of deliveries in shipment, type: NUMC(4)}
+  VTTS:
+    description: Shipment Stages (legs)
+    module: LE-TRA
+    primary_key: [MANDT, TKNUM, TSNUM]
+    confidence: standard
+    role: Legs / stages of a shipment with departure and destination points.
+    fields:
+      TKNUM: {description: Shipment number, type: CHAR(10)}
+      TSNUM: {description: Stage number, type: NUMC(4)}
+      VSTEL: {description: Departure shipping point, type: CHAR(4)}
+      KUNNA: {description: Destination customer, type: CHAR(10)}
+      VSTEZ: {description: Destination shipping point, type: CHAR(4)}
+      WERKA: {description: Departure plant, type: CHAR(4)}
+      WERKZ: {description: Destination plant, type: CHAR(4)}
+      ROUTE: {description: Route, type: CHAR(6)}
+      TDLNR: {description: Carrier for this leg, type: CHAR(10)}
+  VFKP:
+    description: Shipment Cost Item
+    module: LE-TRA
+    primary_key: [MANDT, FKNUM, FKPOS]
+    confidence: standard
+    role: Freight cost items. REBEL holds the reference object (shipment number for shipment-level costs).
+    notes: "Join to shipment via REBEL = TKNUM and REFTY (reference type) - validate the reference type used in your configuration. Header is VFKK."
+    fields:
+      FKNUM: {description: Shipment cost number, type: CHAR(10)}
+      FKPOS: {description: Shipment cost item, type: NUMC(6)}
+      REBEL: {description: Reference object (e.g. shipment number), type: CHAR(10)}
+      REFTY: {description: Reference type, type: CHAR(1)}
+      NETWR: {description: Net value, type: CURR}
+      WAERS: {description: Currency, type: CUKY}
+  VEKP:
+    description: Handling Unit Header
+    module: LE-HU
+    primary_key: [MANDT, VENUM]
+    confidence: standard
+    role: Handling units (pallets, cartons) packed for deliveries / shipments.
+    notes: "VPOBJ + VPOBJKEY identify the packing object (01 = outbound delivery, 04 = shipment)."
+    fields:
+      VENUM: {description: Internal HU number, type: CHAR(10)}
+      EXIDV: {description: External HU identification (SSCC), type: CHAR(20)}
+      VPOBJ: {description: Packing object type, type: CHAR(2)}
+      VPOBJKEY: {description: Key of packing object (delivery/shipment no.), type: CHAR(22)}
+      BRGEW: {description: Gross weight, type: QUAN}
+  VEPO:
+    description: Handling Unit Item
+    module: LE-HU
+    primary_key: [MANDT, VENUM, VEPOS]
+    confidence: standard
+    role: Contents of a handling unit (delivery item reference VBELN/POSNR).
+    fields:
+      VENUM: {description: Internal HU number, type: CHAR(10)}
+      VEPOS: {description: HU item, type: NUMC(6)}
+      VBELN: {description: Delivery, type: CHAR(10)}
+      POSNR: {description: Delivery item, type: NUMC(6)}
+      VEMNG: {description: Packed quantity, type: QUAN}
+      MATNR: {description: Material, type: CHAR(40)}
+  VBRK:
+    description: Billing Document Header
+    module: SD-BIL
+    primary_key: [MANDT, VBELN]
+    confidence: standard
+    role: Invoice / credit memo header.
+    fields:
+      VBELN: {description: Billing document, type: CHAR(10)}
+      FKART: {description: Billing type, type: CHAR(4)}
+      FKDAT: {description: Billing date, type: DATS}
+      KUNAG: {description: Sold-to party, type: CHAR(10)}
+      NETWR: {description: Net value, type: CURR}
+      WAERK: {description: Currency, type: CUKY}
+      FKSTO: {description: Billing document is cancelled, type: CHAR(1)}
+  VBRP:
+    description: Billing Document Item
+    module: SD-BIL
+    primary_key: [MANDT, VBELN, POSNR]
+    confidence: standard
+    role: Invoice items with references to delivery (VGBEL/VGPOS) and sales order (AUBEL/AUPOS).
+    fields:
+      VBELN: {description: Billing document, type: CHAR(10)}
+      POSNR: {description: Billing item, type: NUMC(6)}
+      MATNR: {description: Material, type: CHAR(40)}
+      FKIMG: {description: Billed quantity, type: QUAN}
+      NETWR: {description: Net value, type: CURR}
+      VGBEL: {description: Reference document (delivery), type: CHAR(10)}
+      VGPOS: {description: Reference item, type: NUMC(6)}
+      AUBEL: {description: Sales order, type: CHAR(10)}
+      AUPOS: {description: Sales order item, type: NUMC(6)}
+  MARA:
+    description: Material Master (General)
+    module: MM
+    primary_key: [MANDT, MATNR]
+    confidence: standard
+    role: Client-level material master attributes.
+    fields:
+      MATNR: {description: Material number, type: CHAR(40)}
+      MTART: {description: Material type, type: CHAR(4)}
+      MATKL: {description: Material group, type: CHAR(9)}
+      MEINS: {description: Base unit of measure, type: UNIT}
+      BRGEW: {description: Gross weight, type: QUAN}
+      ERSDA: {description: Created on, type: DATS}
+  MAKT:
+    description: Material Descriptions
+    module: MM
+    primary_key: [MANDT, MATNR, SPRAS]
+    confidence: standard
+    role: Language-dependent material description - always filter SPRAS to avoid fan-out.
+    fields:
+      MATNR: {description: Material number, type: CHAR(40)}
+      SPRAS: {description: Language key, type: LANG}
+      MAKTX: {description: Material description, type: CHAR(40)}
+  MARC:
+    description: Material Master (Plant)
+    module: MM
+    primary_key: [MANDT, MATNR, WERKS]
+    confidence: standard
+    role: Plant-level material data (MRP, procurement, serial number profile SERNP).
+    fields:
+      MATNR: {description: Material, type: CHAR(40)}
+      WERKS: {description: Plant, type: CHAR(4)}
+      SERNP: {description: Serial number profile, type: CHAR(4)}
+      DISPO: {description: MRP controller, type: CHAR(3)}
+  MARD:
+    description: Storage Location Stock
+    module: MM-IM
+    primary_key: [MANDT, MATNR, WERKS, LGORT]
+    confidence: standard
+    role: Stock quantities per material / plant / storage location.
+    fields:
+      MATNR: {description: Material, type: CHAR(40)}
+      WERKS: {description: Plant, type: CHAR(4)}
+      LGORT: {description: Storage location, type: CHAR(4)}
+      LABST: {description: Valuated unrestricted-use stock, type: QUAN}
+      INSME: {description: Stock in quality inspection, type: QUAN}
+      SPEME: {description: Blocked stock, type: QUAN}
+      UMLME: {description: Stock in transfer (SLoc to SLoc), type: QUAN}
+  MCHB:
+    description: Batch Stocks
+    module: MM-IM
+    primary_key: [MANDT, MATNR, WERKS, LGORT, CHARG]
+    confidence: standard
+    role: Stock per batch.
+    fields:
+      MATNR: {description: Material, type: CHAR(40)}
+      WERKS: {description: Plant, type: CHAR(4)}
+      LGORT: {description: Storage location, type: CHAR(4)}
+      CHARG: {description: Batch, type: CHAR(10)}
+      CLABS: {description: Unrestricted stock, type: QUAN}
+      CINSM: {description: Quality inspection stock, type: QUAN}
+      CSPEM: {description: Blocked stock, type: QUAN}
+  T001W:
+    description: Plants
+    module: Basis/Org
+    primary_key: [MANDT, WERKS]
+    confidence: standard
+    role: Plant name and address.
+    fields:
+      WERKS: {description: Plant, type: CHAR(4)}
+      NAME1: {description: Plant name, type: CHAR(30)}
+      LAND1: {description: Country, type: CHAR(3)}
+  T001L:
+    description: Storage Locations
+    module: Basis/Org
+    primary_key: [MANDT, WERKS, LGORT]
+    confidence: standard
+    role: Storage location descriptions.
+    fields:
+      WERKS: {description: Plant, type: CHAR(4)}
+      LGORT: {description: Storage location, type: CHAR(4)}
+      LGOBE: {description: Description, type: CHAR(16)}
+  EKKO:
+    description: Purchasing Document Header
+    module: MM-PUR
+    primary_key: [MANDT, EBELN]
+    confidence: standard
+    role: Purchase order / STO header.
+    fields:
+      EBELN: {description: Purchasing document, type: CHAR(10)}
+      BSART: {description: Document type (NB standard, UB stock transport), type: CHAR(4)}
+      LIFNR: {description: Vendor, type: CHAR(10)}
+      RESWK: {description: Supplying plant (STO), type: CHAR(4)}
+      BEDAT: {description: Purchasing document date, type: DATS}
+      EKORG: {description: Purchasing organization, type: CHAR(4)}
+      WAERS: {description: Currency, type: CUKY}
+      AEDAT: {description: Created on, type: DATS}
+  EKPO:
+    description: Purchasing Document Item
+    module: MM-PUR
+    primary_key: [MANDT, EBELN, EBELP]
+    confidence: standard
+    role: PO items - material, quantity, receiving plant.
+    fields:
+      EBELN: {description: Purchasing document, type: CHAR(10)}
+      EBELP: {description: Item, type: NUMC(5)}
+      MATNR: {description: Material, type: CHAR(40)}
+      WERKS: {description: Plant, type: CHAR(4)}
+      LGORT: {description: Storage location, type: CHAR(4)}
+      MENGE: {description: PO quantity, type: QUAN}
+      MEINS: {description: Order unit, type: UNIT}
+      NETWR: {description: Net order value, type: CURR}
+      LOEKZ: {description: Deletion indicator, type: CHAR(1)}
+      ELIKZ: {description: Delivery completed indicator, type: CHAR(1)}
+  EKET:
+    description: PO Schedule Lines
+    module: MM-PUR
+    primary_key: [MANDT, EBELN, EBELP, ETENR]
+    confidence: standard
+    role: Delivery dates and scheduled / received quantities per PO item.
+    fields:
+      EBELN: {description: Purchasing document, type: CHAR(10)}
+      EBELP: {description: Item, type: NUMC(5)}
+      ETENR: {description: Schedule line, type: NUMC(4)}
+      EINDT: {description: Delivery date, type: DATS}
+      MENGE: {description: Scheduled quantity, type: QUAN}
+      WEMNG: {description: Quantity received, type: QUAN}
+  EKBE:
+    description: Purchasing Document History
+    module: MM-PUR
+    primary_key: [MANDT, EBELN, EBELP, ZEKKN, VGABE, GJAHR, BELNR, BUZEI]
+    confidence: standard
+    role: GR / IR history per PO item. VGABE = 1 goods receipt, 2 invoice receipt.
+    fields:
+      EBELN: {description: Purchasing document, type: CHAR(10)}
+      EBELP: {description: Item, type: NUMC(5)}
+      ZEKKN: {description: Account assignment sequence, type: NUMC(2)}
+      VGABE: {description: Transaction type (1=GR, 2=IR), type: CHAR(1)}
+      GJAHR: {description: Material doc year, type: NUMC(4)}
+      BELNR: {description: Material / invoice document, type: CHAR(10)}
+      BUZEI: {description: Item in document, type: NUMC(4)}
+      BWART: {description: Movement type, type: CHAR(3)}
+      BUDAT: {description: Posting date, type: DATS}
+      MENGE: {description: Quantity, type: QUAN}
+      SHKZG: {description: Debit/credit (S/H), type: CHAR(1)}
+  AUFK:
+    description: Order Master Data
+    module: PP/CO
+    primary_key: [MANDT, AUFNR]
+    confidence: standard
+    role: Generic order header (production, maintenance, internal orders). Status via OBJNR -> JEST.
+    fields:
+      AUFNR: {description: Order number, type: CHAR(12)}
+      AUART: {description: Order type, type: CHAR(4)}
+      WERKS: {description: Plant, type: CHAR(4)}
+      OBJNR: {description: Object number (status), type: CHAR(22)}
+      ERDAT: {description: Created on, type: DATS}
+  AFKO:
+    description: Production Order Header (PP)
+    module: PP
+    primary_key: [MANDT, AUFNR]
+    confidence: standard
+    role: Production order dates and quantities.
+    fields:
+      AUFNR: {description: Order number, type: CHAR(12)}
+      GAMNG: {description: Total order quantity, type: QUAN}
+      GSTRP: {description: Basic start date, type: DATS}
+      GLTRP: {description: Basic finish date, type: DATS}
+      RSNUM: {description: Reservation number (components), type: NUMC(10)}
+  AFPO:
+    description: Production Order Item
+    module: PP
+    primary_key: [MANDT, AUFNR, POSNR]
+    confidence: standard
+    role: Produced material, planned and delivered (GR) quantity.
+    fields:
+      AUFNR: {description: Order number, type: CHAR(12)}
+      POSNR: {description: Order item, type: NUMC(4)}
+      MATNR: {description: Material, type: CHAR(40)}
+      PSMNG: {description: Order item quantity, type: QUAN}
+      WEMNG: {description: Quantity of goods received, type: QUAN}
+      PWERK: {description: Planning plant, type: CHAR(4)}
+  RESB:
+    description: Reservation / Dependent Requirements
+    module: PP/MM
+    primary_key: [MANDT, RSNUM, RSPOS, RSART]
+    confidence: standard
+    role: Component requirements of production orders (BDMNG required, ENMNG withdrawn).
+    fields:
+      RSNUM: {description: Reservation number, type: NUMC(10)}
+      RSPOS: {description: Reservation item, type: NUMC(4)}
+      RSART: {description: Record type, type: CHAR(1)}
+      AUFNR: {description: Order number, type: CHAR(12)}
+      MATNR: {description: Component material, type: CHAR(40)}
+      BDMNG: {description: Requirement quantity, type: QUAN}
+      ENMNG: {description: Quantity withdrawn, type: QUAN}
+  EQUI:
+    description: Equipment Master (serialised material instances)
+    module: PM/LO-MD-SN
+    primary_key: [MANDT, EQUNR]
+    confidence: standard
+    role: Each material serial number is stored as an equipment record (MATNR + SERNR is the business key).
+    fields:
+      EQUNR: {description: Equipment number, type: CHAR(18)}
+      MATNR: {description: Material, type: CHAR(40)}
+      SERNR: {description: Serial number, type: CHAR(18)}
+      EQTYP: {description: Equipment category, type: CHAR(1)}
+      OBJNR: {description: Object number (status), type: CHAR(22)}
+      ERDAT: {description: Created on, type: DATS}
+      AEDAT: {description: Changed on, type: DATS}
+  EQBS:
+    description: Serial Number Stock Segment
+    module: LO-MD-SN
+    primary_key: [MANDT, EQUNR]
+    confidence: standard
+    role: Current stock information of a serial number - plant, storage location, batch, special stock, customer.
+    fields:
+      EQUNR: {description: Equipment number, type: CHAR(18)}
+      B_WERK: {description: Plant, type: CHAR(4)}
+      B_LAGER: {description: Storage location, type: CHAR(4)}
+      B_CHARGE: {description: Batch, type: CHAR(10)}
+      SOBKZ: {description: Special stock indicator, type: CHAR(1)}
+      KUNNR: {description: Customer (special stock), type: CHAR(10)}
+      LBBSA: {description: Stock type, type: CHAR(2)}
+  EQKT:
+    description: Equipment Short Texts
+    module: PM
+    primary_key: [MANDT, EQUNR, SPRAS]
+    confidence: standard
+    role: Description of equipment / serial number record.
+    fields:
+      EQUNR: {description: Equipment number, type: CHAR(18)}
+      SPRAS: {description: Language, type: LANG}
+      EQKTX: {description: Description, type: CHAR(40)}
+  OBJK:
+    description: Plant Maintenance Object List (serial numbers in documents)
+    module: LO-MD-SN
+    primary_key: [MANDT, OBKNR, OBZAE]
+    confidence: standard
+    role: Serial numbers assigned to an object list; linked to documents via SER01/SER02/SER03.
+    fields:
+      OBKNR: {description: Object list number, type: NUMC(10)}
+      OBZAE: {description: Object list counter, type: NUMC(6)}
+      EQUNR: {description: Equipment number, type: CHAR(18)}
+      SERNR: {description: Serial number, type: CHAR(18)}
+      MATNR: {description: Material, type: CHAR(40)}
+      TASER: {description: Header table (SER01/SER02/SER03...), type: CHAR(5)}
+  SER01:
+    description: Document Header for Serial Numbers in Delivery
+    module: LO-MD-SN
+    primary_key: [MANDT, OBKNR]
+    confidence: standard
+    role: Links an object list (OBKNR) to a delivery item (LIEF_NR / POSNR).
+    fields:
+      OBKNR: {description: Object list number, type: NUMC(10)}
+      LIEF_NR: {description: Delivery, type: CHAR(10)}
+      POSNR: {description: Delivery item, type: NUMC(6)}
+      VBTYP: {description: SD document category, type: CHAR(1)}
+      DATUM: {description: Date, type: DATS}
+  SER03:
+    description: Document Header for Serial Numbers in Goods Movements
+    module: LO-MD-SN
+    primary_key: [MANDT, OBKNR]
+    confidence: standard
+    role: Links an object list to a material document line (MBLNR / MJAHR / ZEILE).
+    fields:
+      OBKNR: {description: Object list number, type: NUMC(10)}
+      MBLNR: {description: Material document, type: CHAR(10)}
+      MJAHR: {description: Material document year, type: NUMC(4)}
+      ZEILE: {description: Material document item, type: NUMC(4)}
+      BWART: {description: Movement type, type: CHAR(3)}
+      WERK: {description: Plant, type: CHAR(4)}
+  JEST:
+    description: Individual Object Status
+    module: Basis/Status
+    primary_key: [MANDT, OBJNR, STAT]
+    confidence: standard
+    role: System/user statuses for objects with OBJNR (orders, equipment). INACT = 'X' means status inactive.
+    fields:
+      OBJNR: {description: Object number, type: CHAR(22)}
+      STAT: {description: Status (e.g. I0002 REL, I0045 TECO), type: CHAR(5)}
+      INACT: {description: Status inactive flag, type: CHAR(1)}
+  TJ02T:
+    description: System Status Texts
+    module: Basis/Status
+    primary_key: [MANDT, ISTAT, SPRAS]
+    confidence: standard
+    role: Text for JEST-STAT system statuses.
+    fields:
+      ISTAT: {description: System status, type: CHAR(5)}
+      SPRAS: {description: Language, type: LANG}
+      TXT04: {description: Status short text (e.g. ESTO, AVLB, ECUS), type: CHAR(4)}
+      TXT30: {description: Status description, type: CHAR(30)}
+
+virtual_tables:
+  SO_DELIVERED_QTY:
+    description: Delivered quantity aggregated per sales order item (from delivery items referencing the order)
+    confidence: inferred
+    primary_key: [MANDT, VGBEL, VGPOS]
+    role: Pre-aggregation that prevents fan-out when you need delivered/open quantity at sales-order-item grain.
+    notes: "LFIMG is in the delivery sales unit; assumes it equals VBAP-VRKME. Excludes nothing by default - add a filter on goods issue status if only shipped quantity is wanted."
+    sql: |
+      SELECT MANDT, VGBEL, VGPOS, SUM(LFIMG) AS DELIVERED_QTY
+      FROM {{LIPS}}
+      WHERE VGBEL IS NOT NULL
+      GROUP BY MANDT, VGBEL, VGPOS
+    fields:
+      VGBEL: {description: Sales order, type: CHAR(10)}
+      VGPOS: {description: Sales order item, type: NUMC(6)}
+      DELIVERED_QTY: {description: Sum of delivered quantity, type: QUAN}
+  SO_CONFIRMED_QTY:
+    description: Confirmed quantity and first requested date per sales order item (from schedule lines)
+    confidence: inferred
+    primary_key: [MANDT, VBELN, POSNR]
+    role: Aggregates VBEP to item grain - avoids multiplying VBAP rows by schedule lines.
+    sql: |
+      SELECT MANDT, VBELN, POSNR, SUM(BMENG) AS CONFIRMED_QTY, MIN(EDATU) AS FIRST_SCHEDULE_DATE
+      FROM {{VBEP}}
+      GROUP BY MANDT, VBELN, POSNR
+    fields:
+      VBELN: {description: Sales order, type: CHAR(10)}
+      POSNR: {description: Item, type: NUMC(6)}
+      CONFIRMED_QTY: {description: Sum of confirmed quantity, type: QUAN}
+      FIRST_SCHEDULE_DATE: {description: First schedule line date, type: DATS}
+
+relationships:
+  - {from: VBAK, to: VBAP, on: [[VBELN, VBELN]], cardinality: "1:N", confidence: standard}
+  - {from: VBAP, to: VBEP, on: [[VBELN, VBELN], [POSNR, POSNR]], cardinality: "1:N", confidence: standard}
+  - {from: VBAP, to: SO_CONFIRMED_QTY, on: [[VBELN, VBELN], [POSNR, POSNR]], cardinality: "1:1", confidence: inferred}
+  - {from: VBAP, to: SO_DELIVERED_QTY, on: [[VBELN, VGBEL], [POSNR, VGPOS]], cardinality: "1:1", confidence: inferred}
+  - {from: VBAK, to: KNA1, on: [[KUNNR, KUNNR]], cardinality: "N:1", confidence: standard, label: sold-to}
+  - {from: VBAP, to: TVAGT, on: [[ABGRU, ABGRU]], cardinality: "N:1", confidence: standard, filter: "{TVAGT}.SPRAS = 'E'"}
+  - {from: VBAP, to: MAKT, on: [[MATNR, MATNR]], cardinality: "N:1", confidence: standard, filter: "{MAKT}.SPRAS = 'E'"}
+  - {from: VBAP, to: MARA, on: [[MATNR, MATNR]], cardinality: "N:1", confidence: standard}
+  - {from: VBAP, to: T001W, on: [[WERKS, WERKS]], cardinality: "N:1", confidence: standard}
+  - {from: VBAK, to: VBPA, on: [[VBELN, VBELN]], cardinality: "1:1", confidence: standard, filter: "{VBPA}.POSNR = '000000' AND {VBPA}.PARVW = 'WE'", label: "ship-to partner (header)"}
+  # order -> delivery: LIPS references the order item directly (VGBEL/VGPOS). VBFA is the generic alternative.
+  - {from: VBAP, to: LIPS, on: [[VBELN, VGBEL], [POSNR, VGPOS]], cardinality: "1:N", confidence: standard, label: "reference document (LIPS-VGBEL/VGPOS)"}
+  - {from: LIKP, to: LIPS, on: [[VBELN, VBELN]], cardinality: "1:N", confidence: standard}
+  - {from: LIKP, to: KNA1, on: [[KUNNR, KUNNR]], cardinality: "N:1", confidence: standard, label: ship-to}
+  - {from: LIPS, to: MAKT, on: [[MATNR, MATNR]], cardinality: "N:1", confidence: standard, filter: "{MAKT}.SPRAS = 'E'"}
+  - {from: LIPS, to: MARA, on: [[MATNR, MATNR]], cardinality: "N:1", confidence: standard}
+  - {from: LIPS, to: T001W, on: [[WERKS, WERKS]], cardinality: "N:1", confidence: standard}
+  - {from: LIPS, to: T001L, on: [[WERKS, WERKS], [LGORT, LGORT]], cardinality: "N:1", confidence: standard}
+  - {from: VBAP, to: VBFA, on: [[VBELN, VBELV], [POSNR, POSNV]], cardinality: "1:N", confidence: standard, filter: "{VBFA}.VBTYP_N = 'J'", label: "document flow order -> delivery"}
+  # delivery -> shipment (bridge VTTP)
+  - {from: LIKP, to: VTTP, on: [[VBELN, VBELN]], cardinality: "1:N", confidence: standard, label: "delivery assigned to shipment(s)"}
+  - {from: VTTK, to: VTTP, on: [[TKNUM, TKNUM]], cardinality: "1:N", confidence: standard}
+  - {from: VTTK, to: VTTS, on: [[TKNUM, TKNUM]], cardinality: "1:N", confidence: standard}
+  - {from: VTTK, to: LFA1, on: [[TDLNR, LIFNR]], cardinality: "N:1", confidence: standard, label: carrier}
+  - {from: VTTK, to: VFKP, on: [[TKNUM, REBEL]], cardinality: "1:N", confidence: validate, label: "freight cost by reference object"}
+  - {from: LIKP, to: VEKP, on: [[VBELN, VPOBJKEY]], cardinality: "1:N", confidence: inferred, filter: "{VEKP}.VPOBJ = '01'", label: "HUs packed on delivery"}
+  - {from: VEKP, to: VEPO, on: [[VENUM, VENUM]], cardinality: "1:N", confidence: standard}
+  # billing
+  - {from: LIPS, to: VBRP, on: [[VBELN, VGBEL], [POSNR, VGPOS]], cardinality: "1:N", confidence: standard, label: "invoice item references delivery item"}
+  - {from: VBRK, to: VBRP, on: [[VBELN, VBELN]], cardinality: "1:N", confidence: standard}
+  # inventory
+  - {from: MARD, to: MARA, on: [[MATNR, MATNR]], cardinality: "N:1", confidence: standard}
+  - {from: MARD, to: MAKT, on: [[MATNR, MATNR]], cardinality: "N:1", confidence: standard, filter: "{MAKT}.SPRAS = 'E'"}
+  - {from: MARD, to: T001W, on: [[WERKS, WERKS]], cardinality: "N:1", confidence: standard}
+  - {from: MARD, to: T001L, on: [[WERKS, WERKS], [LGORT, LGORT]], cardinality: "N:1", confidence: standard}
+  - {from: MARD, to: MCHB, on: [[MATNR, MATNR], [WERKS, WERKS], [LGORT, LGORT]], cardinality: "1:N", confidence: standard}
+  - {from: MARC, to: MARD, on: [[MATNR, MATNR], [WERKS, WERKS]], cardinality: "1:N", confidence: standard}
+  # purchasing
+  - {from: EKKO, to: EKPO, on: [[EBELN, EBELN]], cardinality: "1:N", confidence: standard}
+  - {from: EKPO, to: EKET, on: [[EBELN, EBELN], [EBELP, EBELP]], cardinality: "1:N", confidence: standard}
+  - {from: EKPO, to: EKBE, on: [[EBELN, EBELN], [EBELP, EBELP]], cardinality: "1:N", confidence: standard, filter: "{EKBE}.VGABE = '1'", label: goods receipts}
+  - {from: EKKO, to: LFA1, on: [[LIFNR, LIFNR]], cardinality: "N:1", confidence: standard}
+  - {from: EKPO, to: MAKT, on: [[MATNR, MATNR]], cardinality: "N:1", confidence: standard, filter: "{MAKT}.SPRAS = 'E'"}
+  - {from: EKPO, to: LIPS, on: [[EBELN, VGBEL], [EBELP, VGPOS]], cardinality: "1:N", confidence: standard, label: "STO outbound delivery references PO item"}
+  # production
+  - {from: AUFK, to: AFKO, on: [[AUFNR, AUFNR]], cardinality: "1:1", confidence: standard}
+  - {from: AFKO, to: AFPO, on: [[AUFNR, AUFNR]], cardinality: "1:N", confidence: standard}
+  - {from: AFKO, to: RESB, on: [[RSNUM, RSNUM]], cardinality: "1:N", confidence: standard}
+  - {from: AFPO, to: MAKT, on: [[MATNR, MATNR]], cardinality: "N:1", confidence: standard, filter: "{MAKT}.SPRAS = 'E'"}
+  # serial numbers
+  - {from: EQUI, to: EQBS, on: [[EQUNR, EQUNR]], cardinality: "1:1", confidence: standard}
+  - {from: EQUI, to: EQKT, on: [[EQUNR, EQUNR]], cardinality: "1:1", confidence: standard, filter: "{EQKT}.SPRAS = 'E'"}
+  - {from: EQUI, to: MAKT, on: [[MATNR, MATNR]], cardinality: "N:1", confidence: standard, filter: "{MAKT}.SPRAS = 'E'"}
+  - {from: EQUI, to: OBJK, on: [[EQUNR, EQUNR]], cardinality: "1:N", confidence: standard, label: "serial in document object lists"}
+  - {from: OBJK, to: SER01, on: [[OBKNR, OBKNR]], cardinality: "N:1", confidence: standard, label: "object list -> delivery"}
+  - {from: OBJK, to: SER03, on: [[OBKNR, OBKNR]], cardinality: "N:1", confidence: standard, label: "object list -> goods movement"}
+  - {from: SER01, to: LIPS, on: [[LIEF_NR, VBELN], [POSNR, POSNR]], cardinality: "N:1", confidence: standard}
+  - {from: SER01, to: LIKP, on: [[LIEF_NR, VBELN]], cardinality: "N:1", confidence: standard}
+  - {from: EQUI, to: JEST, on: [[OBJNR, OBJNR]], cardinality: "1:N", confidence: standard, filter: "COALESCE({JEST}.INACT, '') <> 'X'"}
+  - {from: EQBS, to: T001W, on: [[B_WERK, WERKS]], cardinality: "N:1", confidence: standard}
+
+concepts:
+  sales_order_number:   {table: VBAK, field: VBELN, confidence: standard}
+  sales_order_item:     {table: VBAP, field: POSNR, confidence: standard}
+  sales_order_type:     {table: VBAK, field: AUART, confidence: standard}
+  order_date:           {table: VBAK, field: AUDAT, confidence: standard, note: "ERDAT = system creation date; AUDAT = document date entered by user"}
+  customer:             {table: VBAK, field: KUNNR, confidence: standard}
+  customer_name:        {table: KNA1, field: NAME1, confidence: standard}
+  ship_to:              {table: VBPA, field: KUNNR, confidence: standard, note: "Partner function WE at header (POSNR '000000'); item-level ship-to overrides possible"}
+  sales_org:            {table: VBAK, field: VKORG, confidence: standard}
+  distribution_channel: {table: VBAK, field: VTWEG, confidence: standard}
+  division:             {table: VBAK, field: SPART, confidence: standard, note: "Header division; item division VBAP-SPART can differ"}
+  material:             {table: VBAP, field: MATNR, confidence: standard}
+  material_description: {table: MAKT, field: MAKTX, confidence: standard}
+  order_quantity:       {table: VBAP, field: KWMENG, confidence: standard}
+  confirmed_quantity:   {expr: "{SO_CONFIRMED_QTY.CONFIRMED_QTY}", confidence: inferred, note: "Sum of VBEP-BMENG per item"}
+  open_quantity:        {expr: "GREATEST({VBAP.KWMENG} - COALESCE({SO_DELIVERED_QTY.DELIVERED_QTY}, 0), 0)", confidence: inferred, note: "Order qty minus delivered qty; set to 0 when item is rejected (ABGRU) in gold layer"}
+  sales_uom:            {table: VBAP, field: VRKME, confidence: standard}
+  requested_delivery_date: {table: VBAK, field: VDATU, confidence: standard, alternatives: ["VBEP-EDATU of first schedule line (ETENR = '0001')"]}
+  rejection_reason:     {table: VBAP, field: ABGRU, confidence: standard, alternatives: ["TVAGT-BEZEI for text"]}
+  net_value:            {table: VBAP, field: NETWR, confidence: standard}
+  currency:             {table: VBAK, field: WAERK, confidence: standard}
+  delivery_number:      {table: LIKP, field: VBELN, confidence: standard}
+  delivery_item:        {table: LIPS, field: POSNR, confidence: standard}
+  delivery_type:        {table: LIKP, field: LFART, confidence: standard}
+  delivery_quantity:    {table: LIPS, field: LFIMG, confidence: standard}
+  shipped_quantity:     {table: LIPS, field: LFIMG, confidence: inferred, note: "Shipped = delivered quantity once goods issue is posted (WBSTA = 'C')"}
+  plant:                {table: LIPS, field: WERKS, confidence: standard}
+  storage_location:     {table: LIPS, field: LGORT, confidence: standard}
+  warehouse:            {table: LIKP, field: LGNUM, confidence: standard, note: "WM/EWM warehouse number"}
+  shipping_point:       {table: LIKP, field: VSTEL, confidence: standard}
+  planned_delivery_date: {table: LIKP, field: LFDAT, confidence: standard}
+  planned_goods_issue_date: {table: LIKP, field: WADAT, confidence: standard}
+  actual_goods_issue_date: {table: LIKP, field: WADAT_IST, confidence: standard}
+  route:                {table: LIKP, field: ROUTE, confidence: standard}
+  shipment_number:      {table: VTTK, field: TKNUM, confidence: standard}
+  shipment_type:        {table: VTTK, field: SHTYP, confidence: standard}
+  shipment_date:        {table: VTTK, field: DATBG, confidence: inferred, note: "Actual shipment start; use DPTBG for planned"}
+  carrier:              {table: VTTK, field: TDLNR, confidence: standard, alternatives: ["VBPA partner function SP on delivery", "LFA1-NAME1 for carrier name"]}
+  transport_mode:       {table: VTTK, field: VSART, confidence: standard}
+  shipment_status:      {table: VTTK, field: STTRG, confidence: standard}
+  departure_date:       {table: VTTK, field: DATBG, confidence: standard}
+  arrival_date:         {table: VTTK, field: DATEN, confidence: inferred, note: "Actual shipment completion date - usually the closest standard field to arrival"}
+  actual_delivery_date: {table: VTTK, field: DATEN, confidence: validate, note: "No standard POD date on VTTK. If POD is used, check LIKP-PODAT / table TVPOD, or carrier event integration"}
+  tracking_number:      {table: VTTK, field: EXTI1, confidence: inferred, note: "Customer-specific usage of EXTI1/EXTI2/SIGNI - validate"}
+  origin:               {table: VTTS, field: VSTEL, confidence: inferred, note: "Departure shipping point of the leg; alternative WERKA (plant)"}
+  destination:          {table: VTTS, field: KUNNA, confidence: inferred, note: "Destination customer of the leg; alternatives VSTEZ / WERKZ"}
+  freight_cost:         {table: VFKP, field: NETWR, confidence: validate, note: "Requires shipment cost documents to be in use"}
+  handling_unit:        {table: VEKP, field: EXIDV, confidence: standard}
+  invoice_number:       {table: VBRK, field: VBELN, confidence: standard}
+  invoice_date:         {table: VBRK, field: FKDAT, confidence: standard}
+  batch:                {table: LIPS, field: CHARG, confidence: standard}
+  serial_number:        {table: EQUI, field: SERNR, confidence: standard, alternatives: ["OBJK-SERNR via SER01 for delivery-level serials"]}
+  stock_unrestricted:   {table: MARD, field: LABST, confidence: standard}
+  stock_blocked:        {table: MARD, field: SPEME, confidence: standard}
+  stock_quality:        {table: MARD, field: INSME, confidence: standard}
+  stock_available:      {expr: "{MARD.LABST}", confidence: validate, note: "True availability (ATP) is not stored - needs reservations/sales requirements logic or MD04/ATP APIs"}
+  purchase_order:       {table: EKKO, field: EBELN, confidence: standard}
+  purchase_order_item:  {table: EKPO, field: EBELP, confidence: standard}
+  supplier:             {table: EKKO, field: LIFNR, confidence: standard}
+  gr_quantity:          {table: EKBE, field: MENGE, confidence: standard, note: "Filter VGABE = '1'; SHKZG = 'H' rows are reversals - sign them negative"}
+  gr_date:              {table: EKBE, field: BUDAT, confidence: standard}
+  production_order:     {table: AFKO, field: AUFNR, confidence: standard}
+  production_quantity:  {table: AFKO, field: GAMNG, confidence: standard}
+  production_completed_qty: {table: AFPO, field: WEMNG, confidence: standard}
+  component_quantity:   {table: RESB, field: BDMNG, confidence: standard, alternatives: ["RESB-ENMNG for withdrawn quantity"]}
+
+business_objects:
+  sales_order:
+    anchor: VBAP
+    header: VBAK
+    grain: One row per sales order item (VBAK-VBELN + VBAP-POSNR)
+    model_type: Header/item transaction fact (accumulating snapshot for fulfilment KPIs)
+    business_key: [VBELN, POSNR]
+    tables: [VBAK, VBAP, VBEP, VBPA, KNA1, MAKT, TVAGT]
+    duplicate_risks:
+      - "Joining VBEP directly multiplies rows by schedule lines - aggregate first (SO_CONFIRMED_QTY)."
+      - "VBPA must be filtered by PARVW and POSNR or each partner creates a row."
+      - "MAKT / TVAGT must be filtered by SPRAS."
+      - "Joining deliveries (LIPS) changes grain to delivery item - aggregate (SO_DELIVERED_QTY) to stay at order item grain."
+  delivery:
+    anchor: LIPS
+    header: LIKP
+    grain: One row per delivery item (LIKP-VBELN + LIPS-POSNR)
+    model_type: Header/item transaction fact
+    business_key: [VBELN, POSNR]
+    tables: [LIKP, LIPS, VBAP, VBAK, KNA1, MAKT]
+    field_overrides:
+      material: {table: LIPS, field: MATNR}
+      sales_order_number: {table: LIPS, field: VGBEL, note: "Reference document - valid when VGTYP = 'C' (order)"}
+      sales_order_item: {table: LIPS, field: VGPOS}
+      customer: {table: LIKP, field: KUNAG}
+      ship_to: {table: LIKP, field: KUNNR}
+      sales_org: {table: LIKP, field: VKORG}
+    duplicate_risks:
+      - "Batch split: main item + sub-items (UECHA <> '000000') can double-count quantity - choose main or sub items consistently."
+      - "A delivery assigned to multiple shipments (multi-leg) duplicates rows when joining VTTP."
+  shipment:
+    anchor: VTTP
+    header: VTTK
+    grain: One row per shipment-delivery assignment (VTTP-TKNUM + TPNUM); join LIPS to go to delivery-item grain
+    model_type: Bridge + accumulating snapshot (shipment milestones)
+    business_key: [TKNUM, TPNUM]
+    tables: [VTTK, VTTP, LIKP, LIPS, VTTS, LFA1, VFKP]
+    field_overrides:
+      material: {table: LIPS, field: MATNR}
+      shipped_quantity: {table: LIPS, field: LFIMG}
+      sales_order_number: {table: LIPS, field: VGBEL}
+      sales_order_item: {table: LIPS, field: VGPOS}
+      customer: {table: LIKP, field: KUNAG}
+      ship_to: {table: LIKP, field: KUNNR}
+      plant: {table: LIPS, field: WERKS}
+    duplicate_risks:
+      - "VTTS (stages) is 1:N to the shipment - joining it fans out deliveries per leg. Pick the main leg or aggregate."
+      - "VFKP (freight costs) is 1:N - aggregate costs per shipment before joining, or allocate cost to deliveries."
+      - "Joining LIPS changes grain to delivery item."
+  billing:
+    anchor: VBRP
+    header: VBRK
+    grain: One row per billing item
+    model_type: Header/item transaction fact
+    business_key: [VBELN, POSNR]
+    tables: [VBRK, VBRP]
+    field_overrides:
+      material: {table: VBRP, field: MATNR}
+      delivery_number: {table: VBRP, field: VGBEL}
+      sales_order_number: {table: VBRP, field: AUBEL}
+      sales_order_item: {table: VBRP, field: AUPOS}
+      net_value: {table: VBRP, field: NETWR}
+      customer: {table: VBRK, field: KUNAG}
+    duplicate_risks: ["Cancelled invoices (FKSTO = 'X') and their cancellation documents both exist - exclude or net them."]
+  inventory:
+    anchor: MARD
+    grain: One row per material / plant / storage location (current snapshot)
+    model_type: Periodic snapshot fact (take daily snapshots in Snowflake for history)
+    business_key: [MATNR, WERKS, LGORT]
+    tables: [MARD, MARA, MAKT, T001W, T001L, MCHB]
+    field_overrides:
+      material: {table: MARD, field: MATNR}
+      plant: {table: MARD, field: WERKS}
+      storage_location: {table: MARD, field: LGORT}
+      batch: {table: MCHB, field: CHARG}
+    duplicate_risks: ["Joining MCHB changes grain to batch - use MCHB quantities instead of MARD when batch is required."]
+  purchase_order:
+    anchor: EKPO
+    header: EKKO
+    grain: One row per purchase order item
+    model_type: Header/item transaction fact
+    business_key: [EBELN, EBELP]
+    tables: [EKKO, EKPO, EKET, EKBE, LFA1]
+    field_overrides:
+      material: {table: EKPO, field: MATNR}
+      plant: {table: EKPO, field: WERKS}
+      order_quantity: {table: EKPO, field: MENGE}
+      net_value: {table: EKPO, field: NETWR}
+      currency: {table: EKKO, field: WAERS}
+      order_date: {table: EKKO, field: BEDAT}
+    duplicate_risks: ["EKET and EKBE are 1:N per item - aggregate before joining at item grain."]
+  production_order:
+    anchor: AFPO
+    header: AFKO
+    grain: One row per production order item
+    model_type: Accumulating snapshot
+    business_key: [AUFNR, POSNR]
+    tables: [AUFK, AFKO, AFPO, RESB, JEST]
+    field_overrides:
+      material: {table: AFPO, field: MATNR}
+      plant: {table: AFPO, field: PWERK}
+    duplicate_risks: ["RESB components are 1:N - model components as a separate fact."]
+  serial_number:
+    anchor: EQUI
+    grain: One row per serialised material instance (MATNR + SERNR)
+    model_type: Dimension (SCD2 recommended) + event history fact from OBJK/SER0x
+    business_key: [MATNR, SERNR]
+    tables: [EQUI, EQBS, EQKT, OBJK, SER01, SER03, JEST, TJ02T]
+    field_overrides:
+      material: {table: EQUI, field: MATNR}
+      plant: {table: EQBS, field: B_WERK}
+      storage_location: {table: EQBS, field: B_LAGER}
+      batch: {table: EQBS, field: B_CHARGE}
+      delivery_number: {table: SER01, field: LIEF_NR}
+      delivery_item: {table: SER01, field: POSNR}
+      material_document: {table: SER03, field: MBLNR}
+    duplicate_risks:
+      - "OBJK holds one row per serial per document - joining it changes grain to serial-document event."
+      - "JEST has multiple active statuses per object - pivot or filter the statuses you need."
+
+transactions:
+  VA03:
+    description: Display Sales Order
+    type: standard
+    program: SAPMV45A
+    program_confidence: standard
+    business_object: sales_order
+    tables: [VBAK, VBAP, VBEP, VBPA, VBFA, KNA1, MAKT]
+    notes: "Same screen as VA01/VA02. Pricing conditions are in PRCD_ELEMENTS (S/4) / KONV (ECC)."
+    historical: "Sales documents remain in VBAK/VBAP until archived (archiving object SD_VBAK)."
+  VA05:
+    description: List of Sales Orders
+    type: standard
+    business_object: sales_order
+    tables: [VBAK, VBAP, VBEP, VBPA]
+    notes: "Report output; underlying data = sales order tables (index tables VAKPA/VAPMA are used for selection)."
+  VL03N:
+    description: Display Outbound Delivery
+    type: standard
+    program: SAPMV50A
+    program_confidence: standard
+    business_object: delivery
+    tables: [LIKP, LIPS, VBPA, VBFA, VEKP, VEPO]
+    historical: "Deliveries remain until archived (archiving object RV_LIKP)."
+  VL06O:
+    description: Outbound Delivery Monitor
+    type: standard
+    business_object: delivery
+    tables: [LIKP, LIPS, VBPA]
+  VT03N:
+    description: Display Shipment
+    type: standard
+    program: SAPMV56A
+    program_confidence: standard
+    business_object: shipment
+    tables: [VTTK, VTTP, VTTS, VTSP, LIKP, LIPS]
+    notes: "VTSP links stages to deliveries. Freight costs: VI03 -> VFKK/VFKP."
+    historical: "Archiving object SD_VTTK."
+  VF03:
+    description: Display Billing Document
+    type: standard
+    program: SAPMV60A
+    program_confidence: standard
+    business_object: billing
+    tables: [VBRK, VBRP, VBPA, VBFA]
+  ME23N:
+    description: Display Purchase Order
+    type: standard
+    business_object: purchase_order
+    tables: [EKKO, EKPO, EKET, EKBE, LFA1]
+  MB51:
+    description: Material Document List
+    type: standard
+    program: RM07DOCS
+    program_confidence: standard
+    business_object: inventory_movement
+    tables: [MATDOC, MKPF, MSEG]
+    notes: "ECC reads MKPF/MSEG; S/4HANA reads MATDOC (MKPF/MSEG are compatibility views)."
+  MMBE:
+    description: Stock Overview
+    type: standard
+    business_object: inventory
+    tables: [MARD, MCHB, MARC, MARA]
+    notes: "Also shows special stocks (MSKA, MSKU, MSLB) and open sales/transfer requirements."
+  MB52:
+    description: List of Warehouse Stocks on Hand
+    type: standard
+    program: RM07MLBS
+    program_confidence: standard
+    business_object: inventory
+    tables: [MARD, MCHB, MARA, MAKT]
+  CO03:
+    description: Display Production Order
+    type: standard
+    business_object: production_order
+    tables: [AUFK, AFKO, AFPO, AFVC, RESB, JEST]
+  IQ09:
+    description: Display Material Serial Number (list)
+    type: standard
+    program_confidence: validate
+    program: "List report of the IQ0x family - confirm via SE93 (System > Status) in your system"
+    business_object: serial_number
+    tables: [EQUI, EQBS, EQKT, OBJK, SER01, SER03, JEST, TJ02T, MAKT]
+    notes: "IQ09 lists serial numbers. The serial master is EQUI (MATNR + SERNR), current stock segment in EQBS, statuses in JEST via EQUI-OBJNR (e.g. ESTO = in stock, ECUS = at customer, AVLB = available). Document history (deliveries, goods movements) comes from OBJK + SER01 (deliveries) / SER03 (goods movements)."
+    historical: "EQUI is master data (no archiving in normal use); OBJK/SER0x keep the full document history per serial number."
+  IQ03:
+    description: Display Material Serial Number (single)
+    type: standard
+    business_object: serial_number
+    tables: [EQUI, EQBS, EQKT, OBJK, SER01, SER03, JEST]

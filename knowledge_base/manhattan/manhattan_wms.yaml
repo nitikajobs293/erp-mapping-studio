@@ -1,0 +1,115 @@
+erp:
+  id: manhattan_wms
+  name: Manhattan WMS (WMOS / Manhattan Active WM)
+  vendor: Manhattan Associates
+  family: Manhattan
+  versions: ["WMOS 2017/2019", "Manhattan Active Warehouse Management (API)"]
+  storage: mixed
+  aliases: [manhattan, wmos, manh, manhattan active, maw]
+  date_type: DATE
+  notes: >
+    WMOS (on-premise, Oracle DB) uses tables such as ORDERS, ORDER_LINE_ITEM, LPN, LPN_DETAIL, SHIPMENT and
+    ITEM_CBO; keys are numeric surrogate ids (ORDER_ID, LPN_ID, SHIPMENT_ID) with TC_* columns holding the
+    business (transaction control) numbers. Manhattan Active WM is cloud-native and exposes data only through
+    REST APIs and data streaming - there is no customer-accessible schema. All mappings here are inferred and
+    must be validated against your WMOS version.
+  source_refs:
+    - "Manhattan WMOS data dictionary (customer portal) - validate"
+
+tables:
+  ORDERS:
+    description: Distribution Order Header
+    module: Outbound
+    primary_key: [ORDER_ID]
+    confidence: inferred
+    role: Outbound (distribution) order interfaced from host ERP.
+    fields:
+      ORDER_ID: {description: Order id (surrogate), type: NUMBER}
+      TC_ORDER_ID: {description: Order number (business), type: VARCHAR}
+      DO_STATUS: {description: Order status, type: NUMBER}
+      D_FACILITY_ID: {description: Destination facility, type: NUMBER}
+      O_FACILITY_ID: {description: Origin facility (warehouse), type: NUMBER}
+      PICKUP_START_DTTM: {description: Pickup start, type: TIMESTAMP}
+      DELIVERY_END_DTTM: {description: Delivery due, type: TIMESTAMP}
+      SHIPMENT_ID: {description: Shipment (TMS/Shipping), type: NUMBER}
+  ORDER_LINE_ITEM:
+    description: Distribution Order Line
+    module: Outbound
+    primary_key: [ORDER_ID, LINE_ITEM_ID]
+    confidence: inferred
+    role: Order lines.
+    fields:
+      ORDER_ID: {description: Order id, type: NUMBER}
+      LINE_ITEM_ID: {description: Line id, type: NUMBER}
+      ITEM_ID: {description: Item id, type: NUMBER}
+      ORDER_QTY: {description: Ordered quantity, type: NUMBER}
+      SHIPPED_QTY: {description: Shipped quantity, type: NUMBER}
+  LPN:
+    description: License Plate (carton / pallet)
+    module: Inventory / Outbound
+    primary_key: [LPN_ID]
+    confidence: inferred
+    role: Outbound LPNs (cartons) with tracking number and ship status.
+    fields:
+      LPN_ID: {description: LPN id, type: NUMBER}
+      TC_LPN_ID: {description: LPN number, type: VARCHAR}
+      ORDER_ID: {description: Order, type: NUMBER}
+      SHIPMENT_ID: {description: Shipment, type: NUMBER}
+      TRACKING_NBR: {description: Tracking number, type: VARCHAR}
+      LPN_FACILITY_STATUS: {description: LPN status, type: NUMBER}
+      SHIPPED_DTTM: {description: Shipped date/time, type: TIMESTAMP}
+  SHIPMENT:
+    description: Shipment / Load
+    module: Shipping
+    primary_key: [SHIPMENT_ID]
+    confidence: inferred
+    role: Shipment (load) with carrier and status.
+    fields:
+      SHIPMENT_ID: {description: Shipment id, type: NUMBER}
+      TC_SHIPMENT_ID: {description: Shipment number, type: VARCHAR}
+      SHIPMENT_STATUS: {description: Status, type: NUMBER}
+      ASSIGNED_CARRIER_CODE: {description: Carrier, type: VARCHAR}
+      ASSIGNED_MOT: {description: Mode of transport, type: VARCHAR}
+
+relationships:
+  - {from: ORDERS, to: ORDER_LINE_ITEM, on: [[ORDER_ID, ORDER_ID]], cardinality: "1:N", confidence: inferred}
+  - {from: ORDERS, to: LPN, on: [[ORDER_ID, ORDER_ID]], cardinality: "1:N", confidence: inferred}
+  - {from: SHIPMENT, to: LPN, on: [[SHIPMENT_ID, SHIPMENT_ID]], cardinality: "1:N", confidence: inferred}
+  - {from: ORDERS, to: SHIPMENT, on: [[SHIPMENT_ID, SHIPMENT_ID]], cardinality: "N:1", confidence: validate}
+
+concepts:
+  sales_order_number:   {table: ORDERS, field: TC_ORDER_ID, confidence: inferred, note: "Host order / delivery number"}
+  delivery_number:      {table: ORDERS, field: TC_ORDER_ID, confidence: validate}
+  order_status:         {table: ORDERS, field: DO_STATUS, confidence: inferred}
+  material:             {table: ORDER_LINE_ITEM, field: ITEM_ID, confidence: inferred, note: "Resolve item code via ITEM_CBO"}
+  order_quantity:       {table: ORDER_LINE_ITEM, field: ORDER_QTY, confidence: inferred}
+  shipped_quantity:     {table: ORDER_LINE_ITEM, field: SHIPPED_QTY, confidence: inferred}
+  handling_unit:        {table: LPN, field: TC_LPN_ID, confidence: inferred}
+  tracking_number:      {table: LPN, field: TRACKING_NBR, confidence: inferred}
+  actual_goods_issue_date: {table: LPN, field: SHIPPED_DTTM, confidence: inferred}
+  shipment_number:      {table: SHIPMENT, field: TC_SHIPMENT_ID, confidence: inferred}
+  shipment_status:      {table: SHIPMENT, field: SHIPMENT_STATUS, confidence: inferred}
+  carrier:              {table: SHIPMENT, field: ASSIGNED_CARRIER_CODE, confidence: inferred}
+  transport_mode:       {table: SHIPMENT, field: ASSIGNED_MOT, confidence: inferred}
+  warehouse:            {table: ORDERS, field: O_FACILITY_ID, confidence: inferred}
+  planned_delivery_date: {table: ORDERS, field: DELIVERY_END_DTTM, confidence: inferred}
+
+business_objects:
+  sales_order:
+    anchor: ORDER_LINE_ITEM
+    header: ORDERS
+    grain: One row per distribution order line
+    model_type: Header/item transaction fact
+    business_key: [ORDER_ID, LINE_ITEM_ID]
+    tables: [ORDERS, ORDER_LINE_ITEM]
+    duplicate_risks: []
+  shipment:
+    anchor: LPN
+    header: SHIPMENT
+    grain: One row per shipped LPN (carton/pallet)
+    model_type: Transaction fact
+    business_key: [LPN_ID]
+    tables: [SHIPMENT, LPN, ORDERS]
+    duplicate_risks: ["LPN_DETAIL is 1:N per LPN - joining it changes grain to LPN content line."]
+
+transactions: {}

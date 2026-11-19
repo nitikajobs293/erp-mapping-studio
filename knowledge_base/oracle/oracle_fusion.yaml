@@ -1,0 +1,122 @@
+erp:
+  id: oracle_fusion
+  name: Oracle Fusion Cloud SCM
+  vendor: Oracle
+  family: Oracle
+  versions: ["Fusion Cloud 24x/25x"]
+  storage: api
+  aliases: [fusion, oracle fusion, oracle cloud, fusion scm]
+  date_type: DATE
+  notes: >
+    Oracle Fusion is SaaS - there is no direct database access. Data is extracted with BI Cloud Connector
+    (BICC) public view objects (PVOs), OTBI/BIP reports or REST APIs; the underlying tables below are what the
+    PVOs read and what most BICC extracts expose column-for-column. Order Management uses the DOO_* (Distributed
+    Order Orchestration) tables; shipping still uses WSH_* tables.
+  source_refs:
+    - "Oracle Fusion Cloud SCM - Tables and Views guide"
+    - "BICC extract PVO documentation"
+
+tables:
+  DOO_HEADERS_ALL:
+    description: Sales Order Header
+    module: Order Management
+    primary_key: [HEADER_ID]
+    confidence: standard
+    role: Order header (one version per change - filter on latest/active version).
+    fields:
+      HEADER_ID: {description: Header id, type: NUMBER}
+      ORDER_NUMBER: {description: Order number, type: VARCHAR2}
+      SOURCE_ORDER_NUMBER: {description: Source system order number, type: VARCHAR2}
+      SOLD_TO_PARTY_ID: {description: Customer party, type: NUMBER}
+      ORDERED_DATE: {description: Ordered date, type: DATE}
+      STATUS_CODE: {description: Status, type: VARCHAR2}
+      SUBMITTED_FLAG: {description: Submitted, type: VARCHAR2}
+      CHANGE_VERSION_NUMBER: {description: Order version, type: NUMBER}
+  DOO_LINES_ALL:
+    description: Sales Order Lines
+    module: Order Management
+    primary_key: [LINE_ID]
+    confidence: standard
+    role: Order lines.
+    fields:
+      LINE_ID: {description: Line id, type: NUMBER}
+      HEADER_ID: {description: Header, type: NUMBER}
+      LINE_NUMBER: {description: Line number, type: NUMBER}
+      INVENTORY_ITEM_ID: {description: Item, type: NUMBER}
+      ORDERED_QTY: {description: Ordered quantity, type: NUMBER}
+      STATUS_CODE: {description: Status, type: VARCHAR2}
+  DOO_FULFILL_LINES_ALL:
+    description: Fulfillment Lines
+    module: Order Management
+    primary_key: [FULFILL_LINE_ID]
+    confidence: standard
+    role: Fulfillment lines - the execution grain (ship-from, schedule, shipped quantity).
+    fields:
+      FULFILL_LINE_ID: {description: Fulfillment line id, type: NUMBER}
+      LINE_ID: {description: Order line, type: NUMBER}
+      HEADER_ID: {description: Header, type: NUMBER}
+      INVENTORY_ITEM_ID: {description: Item, type: NUMBER}
+      FULFILL_ORG_ID: {description: Ship-from org, type: NUMBER}
+      ORDERED_QTY: {description: Ordered qty, type: NUMBER}
+      SHIPPED_QTY: {description: Shipped qty, type: NUMBER}
+      REQUEST_SHIP_DATE: {description: Requested ship date, type: DATE}
+      SCHEDULE_SHIP_DATE: {description: Scheduled ship date, type: DATE}
+      ACTUAL_SHIP_DATE: {description: Actual ship date, type: DATE}
+      STATUS_CODE: {description: Fulfillment status, type: VARCHAR2}
+  WSH_DELIVERY_DETAILS:
+    description: Shipment Lines
+    module: Shipping
+    primary_key: [DELIVERY_DETAIL_ID]
+    confidence: standard
+    role: Shipment lines; SOURCE_SHIPMENT_ID / FULFILL_LINE_ID link to the order fulfillment line.
+    fields:
+      DELIVERY_DETAIL_ID: {description: Shipment line id, type: NUMBER}
+      FULFILL_LINE_ID: {description: Fulfillment line, type: NUMBER}
+      SHIPPED_QUANTITY: {description: Shipped quantity, type: NUMBER}
+      TRACKING_NUMBER: {description: Tracking number, type: VARCHAR2}
+  WSH_NEW_DELIVERIES:
+    description: Shipments
+    module: Shipping
+    primary_key: [DELIVERY_ID]
+    confidence: standard
+    role: Shipment header.
+    fields:
+      DELIVERY_ID: {description: Shipment id, type: NUMBER}
+      DELIVERY_NAME: {description: Shipment number, type: VARCHAR2}
+      STATUS_CODE: {description: Status, type: VARCHAR2}
+      CARRIER_ID: {description: Carrier, type: NUMBER}
+      INITIAL_PICKUP_DATE: {description: Ship date, type: DATE}
+
+relationships:
+  - {from: DOO_HEADERS_ALL, to: DOO_LINES_ALL, on: [[HEADER_ID, HEADER_ID]], cardinality: "1:N", confidence: standard}
+  - {from: DOO_LINES_ALL, to: DOO_FULFILL_LINES_ALL, on: [[LINE_ID, LINE_ID]], cardinality: "1:N", confidence: standard}
+  - {from: DOO_FULFILL_LINES_ALL, to: WSH_DELIVERY_DETAILS, on: [[FULFILL_LINE_ID, FULFILL_LINE_ID]], cardinality: "1:N", confidence: validate, note: "Link column name differs by release (SOURCE_LINE_ID vs FULFILL_LINE_ID) - validate"}
+
+concepts:
+  sales_order_number:   {table: DOO_HEADERS_ALL, field: ORDER_NUMBER, confidence: standard}
+  sales_order_item:     {table: DOO_LINES_ALL, field: LINE_NUMBER, confidence: standard}
+  order_date:           {table: DOO_HEADERS_ALL, field: ORDERED_DATE, confidence: standard}
+  customer:             {table: DOO_HEADERS_ALL, field: SOLD_TO_PARTY_ID, confidence: standard}
+  order_quantity:       {table: DOO_FULFILL_LINES_ALL, field: ORDERED_QTY, confidence: standard}
+  shipped_quantity:     {table: DOO_FULFILL_LINES_ALL, field: SHIPPED_QTY, confidence: standard}
+  requested_delivery_date: {table: DOO_FULFILL_LINES_ALL, field: REQUEST_SHIP_DATE, confidence: standard}
+  planned_goods_issue_date: {table: DOO_FULFILL_LINES_ALL, field: SCHEDULE_SHIP_DATE, confidence: standard}
+  actual_goods_issue_date: {table: DOO_FULFILL_LINES_ALL, field: ACTUAL_SHIP_DATE, confidence: standard}
+  order_status:         {table: DOO_FULFILL_LINES_ALL, field: STATUS_CODE, confidence: standard}
+  plant:                {table: DOO_FULFILL_LINES_ALL, field: FULFILL_ORG_ID, confidence: standard}
+  delivery_number:      {table: WSH_NEW_DELIVERIES, field: DELIVERY_NAME, confidence: standard}
+  tracking_number:      {table: WSH_DELIVERY_DETAILS, field: TRACKING_NUMBER, confidence: standard}
+  carrier:              {table: WSH_NEW_DELIVERIES, field: CARRIER_ID, confidence: standard}
+  material:             {table: DOO_FULFILL_LINES_ALL, field: INVENTORY_ITEM_ID, confidence: standard, note: "Resolve item number via EGP_SYSTEM_ITEMS_B"}
+
+business_objects:
+  sales_order:
+    anchor: DOO_FULFILL_LINES_ALL
+    header: DOO_HEADERS_ALL
+    grain: One row per fulfillment line
+    model_type: Header/item transaction fact
+    business_key: [FULFILL_LINE_ID]
+    tables: [DOO_HEADERS_ALL, DOO_LINES_ALL, DOO_FULFILL_LINES_ALL]
+    duplicate_risks: ["DOO_HEADERS_ALL keeps one row per order revision (CHANGE_VERSION_NUMBER) - keep the latest submitted version."]
+
+transactions: {}

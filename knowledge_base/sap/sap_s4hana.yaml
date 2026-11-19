@@ -1,0 +1,133 @@
+erp:
+  id: sap_s4hana
+  name: SAP S/4HANA
+  inherits: sap_common
+  vendor: SAP
+  family: SAP
+  versions: ["S/4HANA 1909", "S/4HANA 2020", "S/4HANA 2021", "S/4HANA 2022", "S/4HANA 2023", "S/4HANA Cloud Private Edition"]
+  storage: relational
+  aliases: [s4, s/4, s4hana, s/4hana, nsap, new sap, sap s4]
+  notes: >
+    S/4HANA simplifications that matter for extraction: SD status tables VBUK/VBUP were removed and their
+    status fields moved to VBAK/VBAP/LIKP/LIPS/VBRK; MKPF/MSEG were replaced by MATDOC (old tables are
+    compatibility views); stock quantity fields in MARD/MCHB are calculated via compatibility (proxy) views,
+    so replicate MATDOC or use the CDS/compatibility views (e.g. NSDM_E_MARD) instead of physical MARD columns;
+    customers/vendors are Business Partners (BUT000) synchronised to KNA1/LFA1. If SAP TM is active,
+    shipments may be Freight Orders (/SCMTMS/D_TORROT) rather than VTTK.
+  source_refs:
+    - "SAP S/4HANA Simplification List - SD data model (VBUK/VBUP elimination)"
+    - "SAP S/4HANA Simplification List - MM-IM data model (MATDOC)"
+
+tables:
+  VBAK:
+    fields:
+      GBSTK: {description: Overall processing status (moved from VBUK), type: CHAR(1)}
+      LFSTK: {description: Delivery status (moved from VBUK), type: CHAR(1)}
+      ABSTK: {description: Rejection status (moved from VBUK), type: CHAR(1)}
+  VBAP:
+    fields:
+      GBSTA: {description: Overall processing status of item (moved from VBUP), type: CHAR(1)}
+      LFSTA: {description: Delivery status of item (moved from VBUP), type: CHAR(1)}
+      ABSTA: {description: Rejection status of item (moved from VBUP), type: CHAR(1)}
+  LIKP:
+    fields:
+      KOSTK: {description: Overall picking status (moved from VBUK), type: CHAR(1)}
+      PKSTK: {description: Packing status (moved from VBUK), type: CHAR(1)}
+      WBSTK: {description: Total goods movement status (moved from VBUK), type: CHAR(1)}
+      GBSTK: {description: Overall processing status (moved from VBUK), type: CHAR(1)}
+  LIPS:
+    fields:
+      KOSTA: {description: Picking status of item, type: CHAR(1)}
+      PKSTA: {description: Packing status of item, type: CHAR(1)}
+      WBSTA: {description: Goods movement status of item, type: CHAR(1)}
+  MARD:
+    notes: "In S/4HANA the quantity fields are not persisted in MARD - they are derived from MATDOC through compatibility views (NSDM_E_MARD / NSDM_V_MARD). Replicated raw MARD quantities may be zero."
+    confidence: validate
+  MATDOC:
+    description: Material Documents (S/4HANA single source of truth for goods movements)
+    module: MM-IM
+    primary_key: [MANDT, KEY1, KEY2, KEY3, KEY4, KEY5, KEY6]
+    confidence: standard
+    role: Replaces MKPF + MSEG. One row per material document line (plus additional technical records). Business key MBLNR + MJAHR + ZEILE.
+    notes: "Use RECORD_TYPE = 'MDOC' for real material document lines. Technical key KEY1..KEY6; business key MBLNR/MJAHR/ZEILE."
+    fields:
+      KEY1: {description: Technical key part 1, type: CHAR}
+      MBLNR: {description: Material document number, type: CHAR(10)}
+      MJAHR: {description: Material document year, type: NUMC(4)}
+      ZEILE: {description: Item in material document, type: NUMC(4)}
+      RECORD_TYPE: {description: Record type (MDOC = material document line), type: CHAR(5)}
+      BWART: {description: Movement type, type: CHAR(3)}
+      MATNR: {description: Material, type: CHAR(40)}
+      WERKS: {description: Plant, type: CHAR(4)}
+      LGORT: {description: Storage location, type: CHAR(4)}
+      CHARG: {description: Batch, type: CHAR(10)}
+      SOBKZ: {description: Special stock indicator, type: CHAR(1)}
+      MENGE: {description: Quantity (entry unit), type: QUAN}
+      STOCK_QTY: {description: Signed stock quantity in base unit, type: QUAN}
+      MEINS: {description: Base unit of measure, type: UNIT}
+      SHKZG: {description: Debit/credit indicator, type: CHAR(1)}
+      BUDAT: {description: Posting date, type: DATS}
+      CPUDT: {description: Entry date, type: DATS}
+      KUNNR: {description: Customer, type: CHAR(10)}
+      LIFNR: {description: Vendor, type: CHAR(10)}
+      KDAUF: {description: Sales order (special stock), type: CHAR(10)}
+      EBELN: {description: Purchase order, type: CHAR(10)}
+      EBELP: {description: PO item, type: NUMC(5)}
+      AUFNR: {description: Production order, type: CHAR(12)}
+      VBELN_IM: {description: Delivery, type: CHAR(10)}
+      VBELP_IM: {description: Delivery item, type: NUMC(6)}
+      SMBLN: {description: Reversed material document, type: CHAR(10)}
+
+relationships:
+  - {from: MATDOC, to: MAKT, on: [[MATNR, MATNR]], cardinality: "N:1", confidence: standard, filter: "{MAKT}.SPRAS = 'E'"}
+  - {from: MATDOC, to: T001W, on: [[WERKS, WERKS]], cardinality: "N:1", confidence: standard}
+  - {from: MATDOC, to: T001L, on: [[WERKS, WERKS], [LGORT, LGORT]], cardinality: "N:1", confidence: standard}
+  - {from: LIPS, to: MATDOC, on: [[VBELN, VBELN_IM], [POSNR, VBELP_IM]], cardinality: "1:N", confidence: inferred, label: "goods issue material doc for delivery item"}
+  - {from: SER03, to: MATDOC, on: [[MBLNR, MBLNR], [MJAHR, MJAHR], [ZEILE, ZEILE]], cardinality: "1:1", confidence: inferred, filter: "{MATDOC}.RECORD_TYPE = 'MDOC'"}
+
+concepts:
+  order_status:        {table: VBAK, field: GBSTK, confidence: standard, note: "A = not processed, B = partially processed, C = completed. Item level: VBAP-GBSTA"}
+  picking_status:      {table: LIKP, field: KOSTK, confidence: standard, note: "Item level LIPS-KOSTA"}
+  packing_status:      {table: LIKP, field: PKSTK, confidence: standard}
+  goods_issue_status:  {table: LIKP, field: WBSTK, confidence: standard, note: "C = goods issue fully posted"}
+  material_document:   {table: MATDOC, field: MBLNR, confidence: standard}
+  movement_type:       {table: MATDOC, field: BWART, confidence: standard}
+  movement_date:       {table: MATDOC, field: BUDAT, confidence: standard}
+  movement_quantity:   {table: MATDOC, field: STOCK_QTY, confidence: inferred, note: "Signed stock quantity in base unit; alternatively MENGE with SHKZG sign"}
+
+business_objects:
+  inventory_movement:
+    anchor: MATDOC
+    grain: One row per material document line (MBLNR + MJAHR + ZEILE) where RECORD_TYPE = 'MDOC'
+    model_type: Transaction fact (event history)
+    business_key: [MBLNR, MJAHR, ZEILE]
+    base_filter: "{MATDOC}.RECORD_TYPE = 'MDOC'"
+    tables: [MATDOC, MAKT, T001W, T001L]
+    field_overrides:
+      material: {table: MATDOC, field: MATNR}
+      plant: {table: MATDOC, field: WERKS}
+      storage_location: {table: MATDOC, field: LGORT}
+      batch: {table: MATDOC, field: CHARG}
+      delivery_number: {table: MATDOC, field: VBELN_IM}
+      purchase_order: {table: MATDOC, field: EBELN}
+      production_order: {table: MATDOC, field: AUFNR}
+    duplicate_risks:
+      - "MATDOC contains technical records besides MDOC lines - filter RECORD_TYPE."
+      - "Reversals are separate documents (SMBLN points to the original) - net them, do not delete."
+  delivery:
+    anchor: LIPS
+    header: LIKP
+    field_overrides:
+      goods_issue_status: {table: LIPS, field: WBSTA, note: "Item-level goods movement status"}
+      picking_status: {table: LIPS, field: KOSTA}
+      packing_status: {table: LIPS, field: PKSTA}
+
+transactions:
+  MB51:
+    tables: [MATDOC, MAKT, T001W]
+    notes: "S/4HANA: MB51 reads MATDOC (MKPF/MSEG are compatibility views on MATDOC)."
+  MIGO:
+    description: Goods Movement
+    type: standard
+    business_object: inventory_movement
+    tables: [MATDOC, EKPO, LIPS]

@@ -1,0 +1,99 @@
+# Canonical (ERP-neutral) logistics data model.
+# Every ERP knowledge file maps its tables/fields onto these concept ids.
+# - synonyms: used to match free-text business column names typed by the user
+# - target: the Snowflake column name used in silver/gold models
+# - type: target Snowflake data type
+# - objects: business objects this concept naturally belongs to
+
+business_objects:
+  sales_order:      {label: Sales Order,          description: Customer order header/item/schedule line}
+  delivery:         {label: Delivery,             description: Outbound delivery / pick-pack-ship document}
+  shipment:         {label: Shipment / Transportation, description: Shipment, load, trip, freight order and carrier data}
+  billing:          {label: Billing / Invoice,    description: Customer invoice header/item}
+  inventory:        {label: Inventory (stock),    description: Stock balances by plant / warehouse / location}
+  inventory_movement: {label: Inventory Movements, description: Goods movements / item ledger / transaction history}
+  serial_number:    {label: Serial Numbers,       description: Serialised items and their document history}
+  purchase_order:   {label: Purchase Order & GR,  description: Purchase order header/item and goods receipt}
+  production_order: {label: Production / Work Order, description: Production order, components and confirmations}
+  returns:          {label: Returns / Reverse Logistics, description: Customer returns orders and return deliveries}
+  stock_transfer:   {label: Stock / Intercompany Transfer, description: Stock transport orders and transfer deliveries}
+
+concepts:
+  # ---------------- Sales order ----------------
+  sales_order_number:   {label: Sales Order Number, target: SALES_ORDER_NUMBER, type: VARCHAR, objects: [sales_order, delivery, shipment, billing, returns], synonyms: [sales order, so number, order number, sales document, so no, order no, sales order no, customer order]}
+  sales_order_item:     {label: Sales Order Item, target: SALES_ORDER_ITEM, type: VARCHAR, objects: [sales_order, delivery, billing], synonyms: [so item, order line, sales order line, line number, item number, order item, so line]}
+  sales_order_type:     {label: Order Type, target: SALES_ORDER_TYPE, type: VARCHAR, objects: [sales_order, returns], synonyms: [order type, document type, sales document type, so type]}
+  order_date:           {label: Order Date, target: ORDER_DATE, type: DATE, objects: [sales_order], synonyms: [order date, document date, so date, created date, creation date, order created]}
+  customer:             {label: Customer (Sold-to), target: SOLD_TO_CUSTOMER, type: VARCHAR, objects: [sales_order, delivery, billing, shipment], synonyms: [customer, sold to, sold-to party, customer number, customer id, account, buyer]}
+  customer_name:        {label: Customer Name, target: SOLD_TO_CUSTOMER_NAME, type: VARCHAR, objects: [sales_order, delivery], synonyms: [customer name, sold to name, account name]}
+  ship_to:              {label: Ship-to Party, target: SHIP_TO_PARTY, type: VARCHAR, objects: [sales_order, delivery, shipment], synonyms: [ship to, ship-to party, ship to party, consignee, delivery address, ship to customer]}
+  sales_org:            {label: Sales Organization, target: SALES_ORG, type: VARCHAR, objects: [sales_order], synonyms: [sales organization, sales org, sales organisation, company, business unit]}
+  distribution_channel: {label: Distribution Channel, target: DISTRIBUTION_CHANNEL, type: VARCHAR, objects: [sales_order], synonyms: [distribution channel, channel, dist channel]}
+  division:             {label: Division, target: DIVISION, type: VARCHAR, objects: [sales_order], synonyms: [division, product division]}
+  material:             {label: Material / Item, target: MATERIAL_NUMBER, type: VARCHAR, objects: [sales_order, delivery, shipment, inventory, inventory_movement, serial_number, purchase_order, production_order, billing], synonyms: [material, material number, item, item number, product, sku, stock code, part number, article, part]}
+  material_description: {label: Material Description, target: MATERIAL_DESCRIPTION, type: VARCHAR, objects: [sales_order, delivery, inventory], synonyms: [material description, item description, product description, description, product name]}
+  order_quantity:       {label: Order Quantity, target: ORDER_QUANTITY, type: "NUMBER(18,3)", objects: [sales_order, purchase_order], synonyms: [order quantity, ordered quantity, order qty, quantity ordered, qty ordered]}
+  confirmed_quantity:   {label: Confirmed Quantity, target: CONFIRMED_QUANTITY, type: "NUMBER(18,3)", objects: [sales_order], synonyms: [confirmed quantity, confirmed qty, committed quantity, allocated quantity]}
+  open_quantity:        {label: Open Quantity, target: OPEN_QUANTITY, type: "NUMBER(18,3)", objects: [sales_order], synonyms: [open quantity, open qty, backorder quantity, remaining quantity, outstanding quantity, back order qty]}
+  sales_uom:            {label: Sales Unit, target: SALES_UOM, type: VARCHAR, objects: [sales_order, delivery], synonyms: [uom, unit, unit of measure, sales unit]}
+  requested_delivery_date: {label: Requested Delivery Date, target: REQUESTED_DELIVERY_DATE, type: DATE, objects: [sales_order], synonyms: [requested delivery date, request date, requested date, customer requested date, rdd, required date, requested ship date]}
+  order_status:         {label: Order Status, target: ORDER_STATUS, type: VARCHAR, objects: [sales_order], synonyms: [order status, so status, overall status, status]}
+  rejection_reason:     {label: Rejection Reason, target: REJECTION_REASON, type: VARCHAR, objects: [sales_order], synonyms: [rejection reason, reason for rejection, cancel reason, cancellation reason]}
+  net_value:            {label: Net Value, target: NET_VALUE, type: "NUMBER(18,2)", objects: [sales_order, billing, purchase_order], synonyms: [net value, net amount, order value, extended price, line amount, amount]}
+  currency:             {label: Currency, target: CURRENCY, type: VARCHAR, objects: [sales_order, billing, purchase_order, shipment], synonyms: [currency, document currency, currency code]}
+  # ---------------- Delivery ----------------
+  delivery_number:      {label: Delivery Number, target: DELIVERY_NUMBER, type: VARCHAR, objects: [delivery, shipment, serial_number, billing], synonyms: [delivery, delivery number, outbound delivery, delivery no, dispatch note, pick ticket, packing slip]}
+  delivery_item:        {label: Delivery Item, target: DELIVERY_ITEM, type: VARCHAR, objects: [delivery, serial_number], synonyms: [delivery item, delivery line, dispatch line]}
+  delivery_type:        {label: Delivery Type, target: DELIVERY_TYPE, type: VARCHAR, objects: [delivery], synonyms: [delivery type]}
+  delivery_quantity:    {label: Delivery Quantity, target: DELIVERY_QUANTITY, type: "NUMBER(18,3)", objects: [delivery], synonyms: [delivery quantity, delivered quantity, dispatch quantity, delivery qty]}
+  shipped_quantity:     {label: Shipped Quantity, target: SHIPPED_QUANTITY, type: "NUMBER(18,3)", objects: [delivery, shipment, sales_order], synonyms: [shipped quantity, shipment quantity, quantity shipped, ship qty, shipped qty]}
+  plant:                {label: Plant / Branch, target: PLANT, type: VARCHAR, objects: [sales_order, delivery, inventory, inventory_movement, purchase_order, production_order, shipment], synonyms: [plant, branch, site, facility, business unit, branch plant, organization]}
+  storage_location:     {label: Storage Location, target: STORAGE_LOCATION, type: VARCHAR, objects: [delivery, inventory, inventory_movement], synonyms: [storage location, sloc, location, bin, sub inventory, subinventory]}
+  warehouse:            {label: Warehouse, target: WAREHOUSE, type: VARCHAR, objects: [inventory, delivery, shipment, inventory_movement], synonyms: [warehouse, wh, warehouse number, dc, distribution center]}
+  shipping_point:       {label: Shipping Point, target: SHIPPING_POINT, type: VARCHAR, objects: [delivery], synonyms: [shipping point, ship from point]}
+  picking_status:       {label: Picking Status, target: PICKING_STATUS, type: VARCHAR, objects: [delivery], synonyms: [picking status, pick status]}
+  packing_status:       {label: Packing Status, target: PACKING_STATUS, type: VARCHAR, objects: [delivery], synonyms: [packing status, pack status]}
+  goods_issue_status:   {label: Goods Issue Status, target: GOODS_ISSUE_STATUS, type: VARCHAR, objects: [delivery], synonyms: [goods issue status, gi status, goods movement status, shipped status, ship status]}
+  planned_delivery_date: {label: Planned Delivery Date, target: PLANNED_DELIVERY_DATE, type: DATE, objects: [delivery, shipment], synonyms: [delivery date, planned delivery date, scheduled delivery date, promised delivery date]}
+  planned_goods_issue_date: {label: Planned Goods Issue Date, target: PLANNED_GOODS_ISSUE_DATE, type: DATE, objects: [delivery], synonyms: [planned goods issue date, planned gi date, scheduled ship date, promised ship date]}
+  actual_goods_issue_date: {label: Actual Goods Issue Date, target: ACTUAL_GOODS_ISSUE_DATE, type: DATE, objects: [delivery, shipment, sales_order], synonyms: [actual goods issue date, actual gi date, agi date, goods issue date, ship date, shipped date, actual ship date, actual shipment date, dispatch date]}
+  # ---------------- Shipment ----------------
+  shipment_number:      {label: Shipment Number, target: SHIPMENT_NUMBER, type: VARCHAR, objects: [shipment], synonyms: [shipment, shipment number, shipment no, shipment id, load number, load id, trip, freight order]}
+  shipment_type:        {label: Shipment Type, target: SHIPMENT_TYPE, type: VARCHAR, objects: [shipment], synonyms: [shipment type]}
+  shipment_date:        {label: Shipment Date, target: SHIPMENT_DATE, type: DATE, objects: [shipment], synonyms: [shipment date, shipment start date, departure date, ship out date]}
+  carrier:              {label: Carrier, target: CARRIER, type: VARCHAR, objects: [shipment, delivery], synonyms: [carrier, forwarding agent, freight forwarder, service agent, haulier, carrier code, scac]}
+  transport_mode:       {label: Transport Mode, target: TRANSPORT_MODE, type: VARCHAR, objects: [shipment, delivery], synonyms: [transport mode, mode of transport, shipping type, ship via, freight mode, service level]}
+  shipment_status:      {label: Shipment Status, target: SHIPMENT_STATUS, type: VARCHAR, objects: [shipment], synonyms: [shipment status, transport status, load status, trip status]}
+  departure_date:       {label: Departure Date, target: ACTUAL_DEPARTURE_DATE, type: DATE, objects: [shipment], synonyms: [departure date, actual departure, shipment start, dispatched date]}
+  arrival_date:         {label: Arrival Date, target: ACTUAL_ARRIVAL_DATE, type: DATE, objects: [shipment], synonyms: [arrival date, actual arrival, shipment end, shipment completion date]}
+  actual_delivery_date: {label: Actual Delivery Date, target: ACTUAL_DELIVERY_DATE, type: DATE, objects: [shipment, sales_order], synonyms: [actual delivery date, proof of delivery date, pod date, delivered date]}
+  tracking_number:      {label: Tracking Number, target: TRACKING_NUMBER, type: VARCHAR, objects: [shipment], synonyms: [tracking number, tracking no, waybill, bill of lading, bol, pro number, airway bill, awb, external id]}
+  route:                {label: Route, target: ROUTE, type: VARCHAR, objects: [shipment, delivery], synonyms: [route, routing]}
+  origin:               {label: Origin, target: ORIGIN, type: VARCHAR, objects: [shipment], synonyms: [origin, ship from, departure point, source location]}
+  destination:          {label: Destination, target: DESTINATION, type: VARCHAR, objects: [shipment], synonyms: [destination, ship to location, destination point]}
+  freight_cost:         {label: Freight Cost, target: FREIGHT_COST, type: "NUMBER(18,2)", objects: [shipment], synonyms: [freight cost, shipment cost, freight charges, transport cost, freight amount]}
+  handling_unit:        {label: Handling Unit / LPN, target: HANDLING_UNIT, type: VARCHAR, objects: [delivery, shipment], synonyms: [handling unit, hu, lpn, license plate, pallet, carton, sscc]}
+  # ---------------- Billing ----------------
+  invoice_number:       {label: Invoice Number, target: INVOICE_NUMBER, type: VARCHAR, objects: [billing], synonyms: [invoice, invoice number, billing document, bill number]}
+  invoice_date:         {label: Invoice Date, target: INVOICE_DATE, type: DATE, objects: [billing], synonyms: [invoice date, billing date]}
+  # ---------------- Inventory ----------------
+  batch:                {label: Batch / Lot, target: BATCH, type: VARCHAR, objects: [inventory, inventory_movement, delivery], synonyms: [batch, lot, lot number, batch number]}
+  serial_number:        {label: Serial Number, target: SERIAL_NUMBER, type: VARCHAR, objects: [serial_number, delivery, inventory], synonyms: [serial number, serial, serial no, sernr]}
+  stock_unrestricted:   {label: Unrestricted / On-hand Stock, target: UNRESTRICTED_QTY, type: "NUMBER(18,3)", objects: [inventory], synonyms: [stock quantity, on hand, on hand quantity, unrestricted stock, available stock, qty on hand]}
+  stock_available:      {label: Available Quantity, target: AVAILABLE_QTY, type: "NUMBER(18,3)", objects: [inventory], synonyms: [available quantity, available to promise, atp, free stock]}
+  stock_blocked:        {label: Blocked Stock, target: BLOCKED_QTY, type: "NUMBER(18,3)", objects: [inventory], synonyms: [blocked stock, blocked quantity, on hold, hold quantity]}
+  stock_quality:        {label: Quality Inspection Stock, target: QUALITY_INSPECTION_QTY, type: "NUMBER(18,3)", objects: [inventory], synonyms: [quality inspection stock, qi stock, inspection stock, quarantine]}
+  movement_type:        {label: Movement / Transaction Type, target: MOVEMENT_TYPE, type: VARCHAR, objects: [inventory_movement], synonyms: [movement type, transaction type, document type, mvt]}
+  material_document:    {label: Material Document / Transaction Id, target: MATERIAL_DOCUMENT, type: VARCHAR, objects: [inventory_movement, serial_number], synonyms: [material document, transaction id, movement document, goods movement number]}
+  movement_date:        {label: Posting / Transaction Date, target: POSTING_DATE, type: DATE, objects: [inventory_movement], synonyms: [posting date, movement date, transaction date, gl date]}
+  movement_quantity:    {label: Movement Quantity, target: MOVEMENT_QTY, type: "NUMBER(18,3)", objects: [inventory_movement], synonyms: [movement quantity, transaction quantity, quantity moved]}
+  # ---------------- Procurement / production ----------------
+  purchase_order:       {label: Purchase Order, target: PURCHASE_ORDER_NUMBER, type: VARCHAR, objects: [purchase_order, stock_transfer], synonyms: [purchase order, po, po number, purchase order number]}
+  purchase_order_item:  {label: PO Item, target: PURCHASE_ORDER_ITEM, type: VARCHAR, objects: [purchase_order, stock_transfer], synonyms: [po item, po line, purchase order line]}
+  supplier:             {label: Supplier, target: SUPPLIER, type: VARCHAR, objects: [purchase_order], synonyms: [supplier, vendor, supplier number, vendor number]}
+  gr_quantity:          {label: Goods Receipt Quantity, target: GOODS_RECEIPT_QTY, type: "NUMBER(18,3)", objects: [purchase_order], synonyms: [goods receipt quantity, received quantity, gr qty, receipt qty]}
+  gr_date:              {label: Goods Receipt Date, target: GOODS_RECEIPT_DATE, type: DATE, objects: [purchase_order], synonyms: [goods receipt date, receipt date, gr date, received date]}
+  production_order:     {label: Production / Work Order, target: PRODUCTION_ORDER_NUMBER, type: VARCHAR, objects: [production_order], synonyms: [production order, work order, manufacturing order, job]}
+  production_quantity:  {label: Production Order Quantity, target: PRODUCTION_ORDER_QTY, type: "NUMBER(18,3)", objects: [production_order], synonyms: [production quantity, order quantity production, planned quantity]}
+  production_completed_qty: {label: Completed / Delivered Quantity, target: PRODUCTION_COMPLETED_QTY, type: "NUMBER(18,3)", objects: [production_order], synonyms: [completed quantity, yield, delivered quantity production, production completion]}
+  component_quantity:   {label: Component Requirement Qty, target: COMPONENT_REQUIRED_QTY, type: "NUMBER(18,3)", objects: [production_order], synonyms: [component quantity, material consumption, requirement quantity, consumed quantity]}

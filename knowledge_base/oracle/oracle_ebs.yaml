@@ -1,0 +1,410 @@
+erp:
+  id: oracle_ebs
+  name: Oracle E-Business Suite
+  vendor: Oracle
+  family: Oracle
+  versions: ["R12.2", "R12.1", "11i"]
+  storage: relational
+  aliases: [ebs, oracle ebs, e-business suite, sap ebs, oracle apps, r12]
+  date_type: DATE
+  notes: >
+    Multi-org tables end with _ALL and carry ORG_ID (operating unit). Inventory objects are keyed by
+    ORGANIZATION_ID (inventory org). Order lines flow to Shipping Execution (WSH_DELIVERY_DETAILS) via
+    SOURCE_LINE_ID; deliveries are grouped into trips (WSH_TRIPS) through legs and stops.
+    Note: "SAP EBS" in the request list is interpreted as Oracle E-Business Suite.
+  source_refs:
+    - "Oracle eTRM (Electronic Technical Reference Manual) for EBS R12"
+
+tables:
+  OE_ORDER_HEADERS_ALL:
+    description: Sales Order Header
+    module: Order Management (ONT)
+    primary_key: [HEADER_ID]
+    confidence: standard
+    role: Sales order header per operating unit.
+    fields:
+      HEADER_ID: {description: Header id (surrogate), type: NUMBER}
+      ORDER_NUMBER: {description: Order number, type: NUMBER}
+      ORDER_TYPE_ID: {description: Order type, type: NUMBER}
+      ORG_ID: {description: Operating unit, type: NUMBER}
+      SOLD_TO_ORG_ID: {description: Customer account id, type: NUMBER}
+      SHIP_TO_ORG_ID: {description: Ship-to site use id, type: NUMBER}
+      ORDERED_DATE: {description: Ordered date, type: DATE}
+      REQUEST_DATE: {description: Request date, type: DATE}
+      FLOW_STATUS_CODE: {description: Header status, type: VARCHAR2(30)}
+      TRANSACTIONAL_CURR_CODE: {description: Currency, type: VARCHAR2(15)}
+      LAST_UPDATE_DATE: {description: Last update, type: DATE}
+  OE_ORDER_LINES_ALL:
+    description: Sales Order Lines
+    module: Order Management (ONT)
+    primary_key: [LINE_ID]
+    confidence: standard
+    role: Order lines - item, quantities, status, schedule and actual ship dates.
+    fields:
+      LINE_ID: {description: Line id, type: NUMBER}
+      HEADER_ID: {description: Header id, type: NUMBER}
+      LINE_NUMBER: {description: Line number, type: NUMBER}
+      SHIPMENT_NUMBER: {description: Line shipment number (split), type: NUMBER}
+      INVENTORY_ITEM_ID: {description: Item id, type: NUMBER}
+      ORDERED_ITEM: {description: Ordered item, type: VARCHAR2(2000)}
+      SHIP_FROM_ORG_ID: {description: Shipping warehouse (inventory org), type: NUMBER}
+      ORDERED_QUANTITY: {description: Ordered quantity, type: NUMBER}
+      SHIPPED_QUANTITY: {description: Shipped quantity, type: NUMBER}
+      CANCELLED_QUANTITY: {description: Cancelled quantity, type: NUMBER}
+      ORDER_QUANTITY_UOM: {description: UoM, type: VARCHAR2(3)}
+      UNIT_SELLING_PRICE: {description: Unit selling price, type: NUMBER}
+      REQUEST_DATE: {description: Request date, type: DATE}
+      SCHEDULE_SHIP_DATE: {description: Scheduled ship date, type: DATE}
+      PROMISE_DATE: {description: Promise date, type: DATE}
+      ACTUAL_SHIPMENT_DATE: {description: Actual shipment date, type: DATE}
+      FLOW_STATUS_CODE: {description: Line status (BOOKED, AWAITING_SHIPPING, SHIPPED, CLOSED, CANCELLED), type: VARCHAR2(30)}
+      CANCELLED_FLAG: {description: Cancelled flag, type: VARCHAR2(1)}
+      LAST_UPDATE_DATE: {description: Last update, type: DATE}
+  WSH_DELIVERY_DETAILS:
+    description: Delivery Details (shipping lines)
+    module: Shipping Execution (WSH)
+    primary_key: [DELIVERY_DETAIL_ID]
+    confidence: standard
+    role: Shippable lines created from order lines (SOURCE_LINE_ID). Picking/shipping status per line, lot/serial, containers.
+    fields:
+      DELIVERY_DETAIL_ID: {description: Delivery detail id, type: NUMBER}
+      SOURCE_CODE: {description: Source (OE), type: VARCHAR2(30)}
+      SOURCE_HEADER_ID: {description: Order header id, type: NUMBER}
+      SOURCE_LINE_ID: {description: Order line id, type: NUMBER}
+      INVENTORY_ITEM_ID: {description: Item, type: NUMBER}
+      ORGANIZATION_ID: {description: Ship-from inventory org, type: NUMBER}
+      SUBINVENTORY: {description: Subinventory, type: VARCHAR2(10)}
+      LOT_NUMBER: {description: Lot, type: VARCHAR2(80)}
+      SERIAL_NUMBER: {description: Serial (single), type: VARCHAR2(30)}
+      REQUESTED_QUANTITY: {description: Requested quantity, type: NUMBER}
+      SHIPPED_QUANTITY: {description: Shipped quantity, type: NUMBER}
+      RELEASED_STATUS: {description: "Status: R ready, S released to warehouse, Y staged, C shipped, B backordered, D cancelled", type: VARCHAR2(1)}
+      CARRIER_ID: {description: Carrier, type: NUMBER}
+      TRACKING_NUMBER: {description: Tracking number, type: VARCHAR2(30)}
+      CONTAINER_FLAG: {description: Y = container (LPN) record, type: VARCHAR2(1)}
+      LAST_UPDATE_DATE: {description: Last update, type: DATE}
+  WSH_DELIVERY_ASSIGNMENTS:
+    description: Delivery Assignments
+    module: Shipping Execution (WSH)
+    primary_key: [DELIVERY_ASSIGNMENT_ID]
+    confidence: standard
+    role: Assigns delivery details to deliveries and to parent containers.
+    fields:
+      DELIVERY_ASSIGNMENT_ID: {description: Assignment id, type: NUMBER}
+      DELIVERY_ID: {description: Delivery, type: NUMBER}
+      DELIVERY_DETAIL_ID: {description: Delivery detail, type: NUMBER}
+      PARENT_DELIVERY_DETAIL_ID: {description: Parent container, type: NUMBER}
+  WSH_NEW_DELIVERIES:
+    description: Deliveries
+    module: Shipping Execution (WSH)
+    primary_key: [DELIVERY_ID]
+    confidence: standard
+    role: Delivery header - name, status, ship method, initial pickup / ultimate drop-off dates and locations.
+    fields:
+      DELIVERY_ID: {description: Delivery id, type: NUMBER}
+      NAME: {description: Delivery name/number, type: VARCHAR2(30)}
+      STATUS_CODE: {description: "OP open, CO confirmed, IT in-transit, CL closed", type: VARCHAR2(2)}
+      SHIP_METHOD_CODE: {description: Ship method, type: VARCHAR2(30)}
+      CARRIER_ID: {description: Carrier, type: NUMBER}
+      INITIAL_PICKUP_DATE: {description: Initial pickup date, type: DATE}
+      ULTIMATE_DROPOFF_DATE: {description: Ultimate drop-off date, type: DATE}
+      INITIAL_PICKUP_LOCATION_ID: {description: Origin location, type: NUMBER}
+      ULTIMATE_DROPOFF_LOCATION_ID: {description: Destination location, type: NUMBER}
+      WAYBILL: {description: Waybill, type: VARCHAR2(30)}
+      CONFIRM_DATE: {description: Ship confirm date, type: DATE}
+      ORGANIZATION_ID: {description: Ship-from org, type: NUMBER}
+  WSH_DELIVERY_LEGS:
+    description: Delivery Legs
+    module: Shipping Execution (WSH)
+    primary_key: [DELIVERY_LEG_ID]
+    confidence: standard
+    role: Links a delivery to trip pick-up and drop-off stops.
+    fields:
+      DELIVERY_LEG_ID: {description: Leg id, type: NUMBER}
+      DELIVERY_ID: {description: Delivery, type: NUMBER}
+      PICK_UP_STOP_ID: {description: Pick-up stop, type: NUMBER}
+      DROP_OFF_STOP_ID: {description: Drop-off stop, type: NUMBER}
+  WSH_TRIP_STOPS:
+    description: Trip Stops
+    module: Shipping Execution (WSH)
+    primary_key: [STOP_ID]
+    confidence: standard
+    role: Stops of a trip with planned/actual departure and arrival.
+    fields:
+      STOP_ID: {description: Stop id, type: NUMBER}
+      TRIP_ID: {description: Trip, type: NUMBER}
+      STOP_LOCATION_ID: {description: Location, type: NUMBER}
+      PLANNED_DEPARTURE_DATE: {description: Planned departure, type: DATE}
+      ACTUAL_DEPARTURE_DATE: {description: Actual departure, type: DATE}
+      ACTUAL_ARRIVAL_DATE: {description: Actual arrival, type: DATE}
+  WSH_TRIPS:
+    description: Trips (shipments)
+    module: Shipping Execution (WSH)
+    primary_key: [TRIP_ID]
+    confidence: standard
+    role: Trip = transport shipment with carrier, vehicle and ship method.
+    fields:
+      TRIP_ID: {description: Trip id, type: NUMBER}
+      NAME: {description: Trip name, type: VARCHAR2(30)}
+      STATUS_CODE: {description: Trip status, type: VARCHAR2(2)}
+      CARRIER_ID: {description: Carrier, type: NUMBER}
+      SHIP_METHOD_CODE: {description: Ship method, type: VARCHAR2(30)}
+      MODE_OF_TRANSPORT: {description: Mode of transport, type: VARCHAR2(30)}
+  MTL_SYSTEM_ITEMS_B:
+    description: Item Master (per inventory organization)
+    module: Inventory (INV)
+    primary_key: [INVENTORY_ITEM_ID, ORGANIZATION_ID]
+    confidence: standard
+    role: Item definition per inventory org. SEGMENT1 is usually the item number.
+    fields:
+      INVENTORY_ITEM_ID: {description: Item id, type: NUMBER}
+      ORGANIZATION_ID: {description: Inventory org, type: NUMBER}
+      SEGMENT1: {description: Item number, type: VARCHAR2(40)}
+      DESCRIPTION: {description: Description, type: VARCHAR2(240)}
+      PRIMARY_UOM_CODE: {description: Primary UoM, type: VARCHAR2(3)}
+  MTL_ONHAND_QUANTITIES_DETAIL:
+    description: On-hand Quantities
+    module: Inventory (INV)
+    primary_key: [ONHAND_QUANTITIES_ID]
+    confidence: standard
+    role: On-hand by item / org / subinventory / locator / lot (one row per receipt layer - aggregate!).
+    fields:
+      ONHAND_QUANTITIES_ID: {description: Id, type: NUMBER}
+      INVENTORY_ITEM_ID: {description: Item, type: NUMBER}
+      ORGANIZATION_ID: {description: Inventory org, type: NUMBER}
+      SUBINVENTORY_CODE: {description: Subinventory, type: VARCHAR2(10)}
+      LOCATOR_ID: {description: Locator, type: NUMBER}
+      LOT_NUMBER: {description: Lot, type: VARCHAR2(80)}
+      PRIMARY_TRANSACTION_QUANTITY: {description: Quantity (primary UoM), type: NUMBER}
+  MTL_MATERIAL_TRANSACTIONS:
+    description: Material Transactions
+    module: Inventory (INV)
+    primary_key: [TRANSACTION_ID]
+    confidence: standard
+    role: All inventory transactions; TRX_SOURCE_LINE_ID / PICKING_LINE_ID link to order/shipping lines for sales issues.
+    fields:
+      TRANSACTION_ID: {description: Transaction id, type: NUMBER}
+      INVENTORY_ITEM_ID: {description: Item, type: NUMBER}
+      ORGANIZATION_ID: {description: Org, type: NUMBER}
+      SUBINVENTORY_CODE: {description: Subinventory, type: VARCHAR2(10)}
+      TRANSACTION_TYPE_ID: {description: Transaction type, type: NUMBER}
+      TRANSACTION_QUANTITY: {description: Quantity (signed), type: NUMBER}
+      TRANSACTION_DATE: {description: Transaction date, type: DATE}
+      TRX_SOURCE_LINE_ID: {description: Source line (order line for sales issues), type: NUMBER}
+      PICKING_LINE_ID: {description: Delivery detail (picking line), type: NUMBER}
+  MTL_SERIAL_NUMBERS:
+    description: Serial Numbers
+    module: Inventory (INV)
+    primary_key: [INVENTORY_ITEM_ID, SERIAL_NUMBER]
+    confidence: standard
+    role: Serial number master with current status and location.
+    fields:
+      INVENTORY_ITEM_ID: {description: Item, type: NUMBER}
+      SERIAL_NUMBER: {description: Serial number, type: VARCHAR2(30)}
+      CURRENT_STATUS: {description: "1 defined, 3 in stores, 4 out of stores", type: NUMBER}
+      CURRENT_ORGANIZATION_ID: {description: Current org, type: NUMBER}
+      LAST_TRANSACTION_ID: {description: Last transaction, type: NUMBER}
+  HZ_CUST_ACCOUNTS:
+    description: Customer Accounts
+    module: TCA (HZ)
+    primary_key: [CUST_ACCOUNT_ID]
+    confidence: standard
+    role: Customer account; name via HZ_PARTIES.
+    fields:
+      CUST_ACCOUNT_ID: {description: Account id, type: NUMBER}
+      ACCOUNT_NUMBER: {description: Account number, type: VARCHAR2(30)}
+      PARTY_ID: {description: Party, type: NUMBER}
+  HZ_PARTIES:
+    description: Parties
+    module: TCA (HZ)
+    primary_key: [PARTY_ID]
+    confidence: standard
+    role: Party name.
+    fields:
+      PARTY_ID: {description: Party id, type: NUMBER}
+      PARTY_NAME: {description: Name, type: VARCHAR2(360)}
+  PO_HEADERS_ALL:
+    description: Purchase Order Headers
+    module: Purchasing (PO)
+    primary_key: [PO_HEADER_ID]
+    confidence: standard
+    role: PO header.
+    fields:
+      PO_HEADER_ID: {description: Header id, type: NUMBER}
+      SEGMENT1: {description: PO number, type: VARCHAR2(20)}
+      VENDOR_ID: {description: Supplier, type: NUMBER}
+      CREATION_DATE: {description: Created, type: DATE}
+  PO_LINES_ALL:
+    description: Purchase Order Lines
+    module: Purchasing (PO)
+    primary_key: [PO_LINE_ID]
+    confidence: standard
+    role: PO lines.
+    fields:
+      PO_LINE_ID: {description: Line id, type: NUMBER}
+      PO_HEADER_ID: {description: Header, type: NUMBER}
+      LINE_NUM: {description: Line number, type: NUMBER}
+      ITEM_ID: {description: Item, type: NUMBER}
+      QUANTITY: {description: Quantity, type: NUMBER}
+  RCV_TRANSACTIONS:
+    description: Receiving Transactions
+    module: Purchasing (PO)
+    primary_key: [TRANSACTION_ID]
+    confidence: standard
+    role: Receipts, deliveries to stock, returns to vendor.
+    fields:
+      TRANSACTION_ID: {description: Id, type: NUMBER}
+      PO_LINE_ID: {description: PO line, type: NUMBER}
+      TRANSACTION_TYPE: {description: RECEIVE / DELIVER / RETURN TO VENDOR..., type: VARCHAR2(25)}
+      QUANTITY: {description: Quantity, type: NUMBER}
+      TRANSACTION_DATE: {description: Date, type: DATE}
+
+relationships:
+  - {from: OE_ORDER_HEADERS_ALL, to: OE_ORDER_LINES_ALL, on: [[HEADER_ID, HEADER_ID]], cardinality: "1:N", confidence: standard}
+  - {from: OE_ORDER_LINES_ALL, to: WSH_DELIVERY_DETAILS, on: [[LINE_ID, SOURCE_LINE_ID]], cardinality: "1:N", confidence: standard, filter: "{WSH_DELIVERY_DETAILS}.SOURCE_CODE = 'OE' AND COALESCE({WSH_DELIVERY_DETAILS}.CONTAINER_FLAG, 'N') = 'N'"}
+  - {from: WSH_DELIVERY_DETAILS, to: WSH_DELIVERY_ASSIGNMENTS, on: [[DELIVERY_DETAIL_ID, DELIVERY_DETAIL_ID]], cardinality: "1:1", confidence: standard}
+  - {from: WSH_DELIVERY_ASSIGNMENTS, to: WSH_NEW_DELIVERIES, on: [[DELIVERY_ID, DELIVERY_ID]], cardinality: "N:1", confidence: standard}
+  - {from: WSH_NEW_DELIVERIES, to: WSH_DELIVERY_LEGS, on: [[DELIVERY_ID, DELIVERY_ID]], cardinality: "1:N", confidence: standard}
+  - {from: WSH_DELIVERY_LEGS, to: WSH_TRIP_STOPS, on: [[PICK_UP_STOP_ID, STOP_ID]], cardinality: "N:1", confidence: standard, label: pick-up stop}
+  - {from: WSH_TRIP_STOPS, to: WSH_TRIPS, on: [[TRIP_ID, TRIP_ID]], cardinality: "N:1", confidence: standard}
+  - {from: OE_ORDER_LINES_ALL, to: MTL_SYSTEM_ITEMS_B, on: [[INVENTORY_ITEM_ID, INVENTORY_ITEM_ID], [SHIP_FROM_ORG_ID, ORGANIZATION_ID]], cardinality: "N:1", confidence: standard}
+  - {from: OE_ORDER_HEADERS_ALL, to: HZ_CUST_ACCOUNTS, on: [[SOLD_TO_ORG_ID, CUST_ACCOUNT_ID]], cardinality: "N:1", confidence: standard}
+  - {from: HZ_CUST_ACCOUNTS, to: HZ_PARTIES, on: [[PARTY_ID, PARTY_ID]], cardinality: "N:1", confidence: standard}
+  - {from: MTL_ONHAND_QUANTITIES_DETAIL, to: MTL_SYSTEM_ITEMS_B, on: [[INVENTORY_ITEM_ID, INVENTORY_ITEM_ID], [ORGANIZATION_ID, ORGANIZATION_ID]], cardinality: "N:1", confidence: standard}
+  - {from: MTL_MATERIAL_TRANSACTIONS, to: MTL_SYSTEM_ITEMS_B, on: [[INVENTORY_ITEM_ID, INVENTORY_ITEM_ID], [ORGANIZATION_ID, ORGANIZATION_ID]], cardinality: "N:1", confidence: standard}
+  - {from: MTL_SERIAL_NUMBERS, to: MTL_SYSTEM_ITEMS_B, on: [[INVENTORY_ITEM_ID, INVENTORY_ITEM_ID], [CURRENT_ORGANIZATION_ID, ORGANIZATION_ID]], cardinality: "N:1", confidence: standard}
+  - {from: PO_HEADERS_ALL, to: PO_LINES_ALL, on: [[PO_HEADER_ID, PO_HEADER_ID]], cardinality: "1:N", confidence: standard}
+  - {from: PO_LINES_ALL, to: RCV_TRANSACTIONS, on: [[PO_LINE_ID, PO_LINE_ID]], cardinality: "1:N", confidence: standard, filter: "{RCV_TRANSACTIONS}.TRANSACTION_TYPE = 'RECEIVE'"}
+
+concepts:
+  sales_order_number:   {table: OE_ORDER_HEADERS_ALL, field: ORDER_NUMBER, confidence: standard}
+  sales_order_item:     {expr: "{OE_ORDER_LINES_ALL.LINE_NUMBER} || '.' || {OE_ORDER_LINES_ALL.SHIPMENT_NUMBER}", confidence: standard, note: "Displayed line number 1.1, 1.2 ... ; LINE_ID is the technical key"}
+  sales_order_type:     {table: OE_ORDER_HEADERS_ALL, field: ORDER_TYPE_ID, confidence: standard, note: "Name via OE_TRANSACTION_TYPES_TL"}
+  order_date:           {table: OE_ORDER_HEADERS_ALL, field: ORDERED_DATE, confidence: standard}
+  customer:             {table: HZ_CUST_ACCOUNTS, field: ACCOUNT_NUMBER, confidence: standard}
+  customer_name:        {table: HZ_PARTIES, field: PARTY_NAME, confidence: standard}
+  ship_to:              {table: OE_ORDER_HEADERS_ALL, field: SHIP_TO_ORG_ID, confidence: standard, note: "Site use id - resolve via HZ_CUST_SITE_USES_ALL"}
+  sales_org:            {table: OE_ORDER_HEADERS_ALL, field: ORG_ID, confidence: inferred, note: "Operating unit is the closest equivalent"}
+  material:             {table: MTL_SYSTEM_ITEMS_B, field: SEGMENT1, confidence: standard}
+  material_description: {table: MTL_SYSTEM_ITEMS_B, field: DESCRIPTION, confidence: standard}
+  order_quantity:       {table: OE_ORDER_LINES_ALL, field: ORDERED_QUANTITY, confidence: standard}
+  open_quantity:        {expr: "{OE_ORDER_LINES_ALL.ORDERED_QUANTITY} - COALESCE({OE_ORDER_LINES_ALL.SHIPPED_QUANTITY}, 0)", confidence: inferred, note: "Exclude CANCELLED/CLOSED lines"}
+  shipped_quantity:     {table: OE_ORDER_LINES_ALL, field: SHIPPED_QUANTITY, confidence: standard}
+  sales_uom:            {table: OE_ORDER_LINES_ALL, field: ORDER_QUANTITY_UOM, confidence: standard}
+  requested_delivery_date: {table: OE_ORDER_LINES_ALL, field: REQUEST_DATE, confidence: standard}
+  order_status:         {table: OE_ORDER_LINES_ALL, field: FLOW_STATUS_CODE, confidence: standard}
+  rejection_reason:     {table: OE_ORDER_LINES_ALL, field: CANCELLED_FLAG, confidence: validate, note: "Cancellation reasons are in OE_REASONS / OE_ORDER_LINES_HISTORY"}
+  net_value:            {expr: "{OE_ORDER_LINES_ALL.ORDERED_QUANTITY} * {OE_ORDER_LINES_ALL.UNIT_SELLING_PRICE}", confidence: standard}
+  currency:             {table: OE_ORDER_HEADERS_ALL, field: TRANSACTIONAL_CURR_CODE, confidence: standard}
+  planned_goods_issue_date: {table: OE_ORDER_LINES_ALL, field: SCHEDULE_SHIP_DATE, confidence: standard}
+  actual_goods_issue_date: {table: OE_ORDER_LINES_ALL, field: ACTUAL_SHIPMENT_DATE, confidence: standard}
+  delivery_number:      {table: WSH_NEW_DELIVERIES, field: NAME, confidence: standard}
+  delivery_item:        {table: WSH_DELIVERY_DETAILS, field: DELIVERY_DETAIL_ID, confidence: standard}
+  delivery_quantity:    {table: WSH_DELIVERY_DETAILS, field: REQUESTED_QUANTITY, confidence: standard}
+  picking_status:       {table: WSH_DELIVERY_DETAILS, field: RELEASED_STATUS, confidence: standard}
+  goods_issue_status:   {table: WSH_NEW_DELIVERIES, field: STATUS_CODE, confidence: standard}
+  plant:                {table: OE_ORDER_LINES_ALL, field: SHIP_FROM_ORG_ID, confidence: standard}
+  storage_location:     {table: WSH_DELIVERY_DETAILS, field: SUBINVENTORY, confidence: standard}
+  batch:                {table: WSH_DELIVERY_DETAILS, field: LOT_NUMBER, confidence: standard}
+  serial_number:        {table: WSH_DELIVERY_DETAILS, field: SERIAL_NUMBER, confidence: inferred, note: "Ranges/multiple serials are in WSH_SERIAL_NUMBERS"}
+  shipment_number:      {table: WSH_TRIPS, field: NAME, confidence: standard}
+  carrier:              {table: WSH_NEW_DELIVERIES, field: CARRIER_ID, confidence: standard}
+  transport_mode:       {table: WSH_TRIPS, field: MODE_OF_TRANSPORT, confidence: standard}
+  shipment_status:      {table: WSH_TRIPS, field: STATUS_CODE, confidence: standard}
+  departure_date:       {table: WSH_TRIP_STOPS, field: ACTUAL_DEPARTURE_DATE, confidence: standard}
+  arrival_date:         {table: WSH_TRIP_STOPS, field: ACTUAL_ARRIVAL_DATE, confidence: inferred, note: "Use the drop-off stop for arrival"}
+  planned_delivery_date: {table: WSH_NEW_DELIVERIES, field: ULTIMATE_DROPOFF_DATE, confidence: standard}
+  tracking_number:      {table: WSH_DELIVERY_DETAILS, field: TRACKING_NUMBER, confidence: standard, alternatives: ["WSH_NEW_DELIVERIES.WAYBILL"]}
+  origin:               {table: WSH_NEW_DELIVERIES, field: INITIAL_PICKUP_LOCATION_ID, confidence: standard}
+  destination:          {table: WSH_NEW_DELIVERIES, field: ULTIMATE_DROPOFF_LOCATION_ID, confidence: standard}
+  stock_unrestricted:   {table: MTL_ONHAND_QUANTITIES_DETAIL, field: PRIMARY_TRANSACTION_QUANTITY, confidence: standard, note: "Aggregate per item/org/subinventory"}
+  movement_type:        {table: MTL_MATERIAL_TRANSACTIONS, field: TRANSACTION_TYPE_ID, confidence: standard}
+  material_document:    {table: MTL_MATERIAL_TRANSACTIONS, field: TRANSACTION_ID, confidence: standard}
+  movement_date:        {table: MTL_MATERIAL_TRANSACTIONS, field: TRANSACTION_DATE, confidence: standard}
+  movement_quantity:    {table: MTL_MATERIAL_TRANSACTIONS, field: TRANSACTION_QUANTITY, confidence: standard}
+  purchase_order:       {table: PO_HEADERS_ALL, field: SEGMENT1, confidence: standard}
+  purchase_order_item:  {table: PO_LINES_ALL, field: LINE_NUM, confidence: standard}
+  supplier:             {table: PO_HEADERS_ALL, field: VENDOR_ID, confidence: standard}
+  gr_quantity:          {table: RCV_TRANSACTIONS, field: QUANTITY, confidence: standard}
+  gr_date:              {table: RCV_TRANSACTIONS, field: TRANSACTION_DATE, confidence: standard}
+
+business_objects:
+  sales_order:
+    anchor: OE_ORDER_LINES_ALL
+    header: OE_ORDER_HEADERS_ALL
+    grain: One row per order line (LINE_ID)
+    model_type: Header/item transaction fact
+    business_key: [LINE_ID]
+    tables: [OE_ORDER_HEADERS_ALL, OE_ORDER_LINES_ALL, MTL_SYSTEM_ITEMS_B, HZ_CUST_ACCOUNTS, HZ_PARTIES]
+    duplicate_risks: ["Split lines (SHIPMENT_NUMBER > 1) are separate lines - not duplicates."]
+  delivery:
+    anchor: WSH_DELIVERY_DETAILS
+    grain: One row per delivery detail (non-container)
+    model_type: Transaction fact
+    business_key: [DELIVERY_DETAIL_ID]
+    base_filter: "{WSH_DELIVERY_DETAILS}.SOURCE_CODE = 'OE' AND COALESCE({WSH_DELIVERY_DETAILS}.CONTAINER_FLAG, 'N') = 'N'"
+    tables: [WSH_DELIVERY_DETAILS, WSH_DELIVERY_ASSIGNMENTS, WSH_NEW_DELIVERIES, OE_ORDER_LINES_ALL, OE_ORDER_HEADERS_ALL]
+    field_overrides:
+      shipped_quantity: {table: WSH_DELIVERY_DETAILS, field: SHIPPED_QUANTITY}
+      plant: {table: WSH_DELIVERY_DETAILS, field: ORGANIZATION_ID}
+    duplicate_risks: ["Container (LPN) records are also delivery details - exclude CONTAINER_FLAG = 'Y'."]
+  shipment:
+    anchor: WSH_NEW_DELIVERIES
+    grain: One row per delivery per trip pick-up leg
+    model_type: Bridge + accumulating snapshot
+    business_key: [DELIVERY_ID]
+    tables: [WSH_NEW_DELIVERIES, WSH_DELIVERY_LEGS, WSH_TRIP_STOPS, WSH_TRIPS]
+    duplicate_risks: ["Multi-leg deliveries have several WSH_DELIVERY_LEGS rows."]
+  inventory:
+    anchor: MTL_ONHAND_QUANTITIES_DETAIL
+    grain: One row per on-hand layer - aggregate to item/org/subinventory/lot
+    model_type: Periodic snapshot fact
+    business_key: [ONHAND_QUANTITIES_ID]
+    tables: [MTL_ONHAND_QUANTITIES_DETAIL, MTL_SYSTEM_ITEMS_B]
+    field_overrides:
+      plant: {table: MTL_ONHAND_QUANTITIES_DETAIL, field: ORGANIZATION_ID}
+      storage_location: {table: MTL_ONHAND_QUANTITIES_DETAIL, field: SUBINVENTORY_CODE}
+      batch: {table: MTL_ONHAND_QUANTITIES_DETAIL, field: LOT_NUMBER}
+    duplicate_risks: ["Multiple rows per item/subinventory (receipt layers) - SUM, do not dedupe."]
+  inventory_movement:
+    anchor: MTL_MATERIAL_TRANSACTIONS
+    grain: One row per material transaction
+    model_type: Transaction fact
+    business_key: [TRANSACTION_ID]
+    tables: [MTL_MATERIAL_TRANSACTIONS, MTL_SYSTEM_ITEMS_B]
+    field_overrides:
+      plant: {table: MTL_MATERIAL_TRANSACTIONS, field: ORGANIZATION_ID}
+      storage_location: {table: MTL_MATERIAL_TRANSACTIONS, field: SUBINVENTORY_CODE}
+    duplicate_risks: []
+  serial_number:
+    anchor: MTL_SERIAL_NUMBERS
+    grain: One row per item + serial number
+    model_type: Dimension (SCD2)
+    business_key: [INVENTORY_ITEM_ID, SERIAL_NUMBER]
+    tables: [MTL_SERIAL_NUMBERS, MTL_SYSTEM_ITEMS_B]
+    field_overrides:
+      serial_number: {table: MTL_SERIAL_NUMBERS, field: SERIAL_NUMBER}
+      plant: {table: MTL_SERIAL_NUMBERS, field: CURRENT_ORGANIZATION_ID}
+    duplicate_risks: []
+  purchase_order:
+    anchor: PO_LINES_ALL
+    header: PO_HEADERS_ALL
+    grain: One row per PO line
+    model_type: Header/item transaction fact
+    business_key: [PO_LINE_ID]
+    tables: [PO_HEADERS_ALL, PO_LINES_ALL, RCV_TRANSACTIONS]
+    field_overrides:
+      order_quantity: {table: PO_LINES_ALL, field: QUANTITY}
+    duplicate_risks: ["RCV_TRANSACTIONS has RECEIVE, DELIVER, CORRECT rows - filter by type."]
+
+transactions:
+  OEXOEORD:
+    description: Sales Orders form (Order Organizer)
+    type: standard
+    business_object: sales_order
+    tables: [OE_ORDER_HEADERS_ALL, OE_ORDER_LINES_ALL]
+  WSHFSTRX:
+    description: Shipping Transactions form
+    type: standard
+    business_object: delivery
+    tables: [WSH_DELIVERY_DETAILS, WSH_DELIVERY_ASSIGNMENTS, WSH_NEW_DELIVERIES, WSH_TRIPS, WSH_TRIP_STOPS]
