@@ -1,0 +1,16 @@
+# ERP / WMS / TMS systems registered WITHOUT table metadata. The platform will not guess their
+# structures: the UI reports "metadata onboarding required" until DDL, inventories or a package
+# are uploaded in Metadata Management.
+systems:
+  - {code: JDE, name: JD Edwards EnterpriseOne, vendor: Oracle, category: ERP, extraction_method: To be confirmed}
+  - {code: INFOR_SYTELINE, name: Infor SyteLine (CloudSuite Industrial), vendor: Infor, category: ERP}
+  - {code: INFOR_M3, name: Infor M3, vendor: Infor, category: ERP}
+  - {code: INFOR_LN, name: Infor LN, vendor: Infor, category: ERP}
+  - {code: D365, name: Microsoft Dynamics 365 Finance & Supply Chain, vendor: Microsoft, category: ERP}
+  - {code: DYNAMICS_AX, name: Microsoft Dynamics AX, vendor: Microsoft, category: ERP}
+  - {code: SYSPRO, name: SYSPRO, vendor: SYSPRO, category: ERP}
+  - {code: ISCALA, name: iScala, vendor: Epicor, category: ERP}
+  - {code: BLUE_YONDER, name: Blue Yonder, vendor: Blue Yonder, category: SCM}
+  - {code: KORBER, name: Körber WMS, vendor: Körber, category: WMS}
+  - {code: MANHATTAN_WMS, name: Manhattan Associates WMS, vendor: Manhattan Associates, category: WMS}
+  - {code: GT_NEXUS, name: GT Nexus (Infor Nexus), vendor: Infor, category: SCM}

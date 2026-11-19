@@ -1,0 +1,15 @@
+[project]
+name = "erp-data-modelling-platform"
+version = "1.0.0"
+requires-python = ">=3.11"
+
+[tool.bandit]
+# B608 (SQL built from strings) is expected in sqlgen.py / dbtgen.py: they *generate SQL text for users to
+# review and download*; that text is never executed by this application. User-supplied filters are parsed and
+# screened (sqlgen._validate_filter). All database access goes through SQLAlchemy with bound parameters.
+skips = ["B608"]
+exclude_dirs = ["tests"]
+
+[tool.ruff]
+line-length = 125
+target-version = "py311"

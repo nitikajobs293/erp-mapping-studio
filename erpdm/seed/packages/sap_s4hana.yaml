@@ -1,0 +1,89 @@
+# SAP S/4HANA — derived from the ECC catalogue with explicit, documented differences.
+# Only differences that are well established are applied; everything stays "requires_validation".
+extends: SAP_ECC
+erp:
+  code: SAP_S4HANA
+  name: SAP S/4HANA
+  vendor: SAP
+  version_label: S/4HANA (on-premise / private cloud)
+  category: ERP
+  description: SAP S/4HANA. Simplified data model — material documents in MATDOC, 40-character material number.
+  extraction_method: SAP ODP (CDS extraction views) / SLT replication into Snowflake RAW
+  default_language_key: E
+  has_client_column: true
+  client_column: MANDT
+defaults:
+  source_type: standard_erp_knowledge
+  confidence: 0.8
+  validation_status: requires_validation
+  source_reference: SAP S/4HANA simplification list (generic knowledge) — validate against your system DDIC
+confidence_cap: 0.85
+column_overrides:
+  MATNR: {length: 40, description: "Material number (40 characters in S/4HANA)"}
+table_overrides:
+  VBFA:
+    notes: "In S/4HANA the technical key of VBFA differs from ECC. Validate key fields in SE11 before relying on uniqueness tests."
+    confidence: 0.6
+remove_tables: [MKPF, MSEG]
+tables:
+  - name: MATDOC
+    description: Material documents (single table replacing MKPF/MSEG; those remain as compatibility views)
+    module: MM
+    table_class: transaction
+    business_entity: Material Document Item
+    default_filter: "{alias}.RECORD_TYPE = 'MDOC'"
+    change_tracking: {columns: [CPUDT, CPUTM], reliable: true, note: "Insert-only document table; CPUDT/CPUTM usable as append watermark."}
+    delete_strategy: Insert-only. Reversals are new documents.
+    confidence: 0.7
+    notes: "Primary key is technical (KEY1..KEY6). MBLNR/MJAHR/ZEILE identify the document item but are not the DB key. Filter RECORD_TYPE = 'MDOC' for real document items (other record types hold aggregates/archiving data)."
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: KEY1, data_type: CHAR, length: 22, is_pk: true, description: Technical key part 1}
+      - {name: KEY2, data_type: CHAR, length: 22, is_pk: true, description: Technical key part 2}
+      - {name: KEY3, data_type: CHAR, length: 22, is_pk: true, description: Technical key part 3}
+      - {name: KEY4, data_type: CHAR, length: 22, is_pk: true, description: Technical key part 4}
+      - {name: KEY5, data_type: CHAR, length: 22, is_pk: true, description: Technical key part 5}
+      - {name: KEY6, data_type: CHAR, length: 22, is_pk: true, description: Technical key part 6}
+      - {name: RECORD_TYPE, data_type: CHAR, length: 5, description: Record type (MDOC = material document item)}
+      - {name: MBLNR, data_type: CHAR, length: 10, description: Number of material document, business_name: Material Document}
+      - {name: MJAHR, data_type: NUMC, length: 4, description: Material document year, business_name: Material Document Year}
+      - {name: ZEILE, data_type: NUMC, length: 4, description: Item in material document}
+      - {name: BUDAT, data_type: DATS, length: 8, description: Posting date, business_name: Posting Date}
+      - {name: CPUDT, data_type: DATS, length: 8, description: Entry date}
+      - {name: CPUTM, data_type: TIMS, length: 6, description: Entry time}
+      - {name: BWART, data_type: CHAR, length: 3, description: Movement type, business_name: Movement Type}
+      - {name: MATNR, data_type: CHAR, length: 40, description: Material number}
+      - {name: WERKS, data_type: CHAR, length: 4, description: Plant, business_name: Movement Plant}
+      - {name: LGORT, data_type: CHAR, length: 4, description: Storage location}
+      - {name: CHARG, data_type: CHAR, length: 10, description: Batch}
+      - {name: SHKZG, data_type: CHAR, length: 1, description: Debit/credit indicator}
+      - {name: MENGE, data_type: QUAN, length: 13, decimals: 3, description: Quantity, business_name: Movement Quantity}
+      - {name: MEINS, data_type: UNIT, length: 3, description: Base unit of measure}
+      - {name: DMBTR, data_type: CURR, length: 13, decimals: 2, description: Amount in local currency, business_name: Movement Amount}
+      - {name: EBELN, data_type: CHAR, length: 10, description: Purchase order number}
+      - {name: EBELP, data_type: NUMC, length: 5, description: Purchase order item}
+      - {name: LIFNR, data_type: CHAR, length: 10, description: Vendor}
+      - {name: KUNNR, data_type: CHAR, length: 10, description: Customer}
+relationships:
+  - {from_table: MATDOC, to_table: MARA, join_columns: [{from: MANDT, to: MANDT}, {from: MATNR, to: MATNR}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Material moved, business_purpose: Material attributes, confidence: 0.85}
+  - {from_table: MATDOC, to_table: T001W, join_columns: [{from: MANDT, to: MANDT}, {from: WERKS, to: WERKS}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Plant of goods movement, business_purpose: Plant name, confidence: 0.85}
+  - {from_table: MATDOC, to_table: EKPO, join_columns: [{from: MANDT, to: MANDT}, {from: EBELN, to: EBELN}, {from: EBELP, to: EBELP}], join_type: LEFT, cardinality: "N:1", relationship_type: reference, description: Goods movement referencing a PO item, business_purpose: PO-to-receipt link, confidence: 0.8}
+transactions:
+  - code: MB51
+    name: Material Document List
+    module: MM
+    process: Inventory Movements
+    business_object: Material document
+    description: List of material documents. In S/4HANA reads MATDOC (directly or through compatibility views).
+    root_table: MATDOC
+    default_columns: [MATDOC.MBLNR, MATDOC.MJAHR, MATDOC.ZEILE, MATDOC.BUDAT, MATDOC.BWART, MATDOC.MATNR, MAKT.MAKTX, MATDOC.WERKS, MATDOC.LGORT, MATDOC.MENGE, MATDOC.MEINS, MATDOC.DMBTR]
+    tables: [{table: MATDOC, role: primary}, {table: MARA, role: lookup}, {table: MAKT, role: text}]
+use_cases:
+  - name: Inventory Movements
+    domain: Inventory Management
+    description: Goods movements by material, plant and movement type (MATDOC).
+    keywords: [inventory, goods movement, material document, stock, movement type, matdoc]
+    tables: [MATDOC, MARA, MAKT]
+    optional_tables: [T001W]
+    root_table: MATDOC
+    grain: One row per material document item

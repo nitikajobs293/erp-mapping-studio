@@ -1,0 +1,22 @@
+# "SAP EBS" as configured in the source landscape. The name suggests an SAP instance; its release and
+# customisation are unknown. Seeded as a standard-ECC ASSUMPTION, capped at 0.5 confidence.
+extends: SAP_ECC
+erp:
+  code: SAP_EBS
+  name: SAP EBS (source landscape)
+  vendor: SAP
+  version_label: Unknown — confirm with basis team
+  category: ERP
+  description: SAP instance labelled EBS in the source landscape. Not to be confused with Oracle E-Business Suite.
+  landscape_notes: "ASSUMPTION: standard SAP ECC structure. Upload DDIC extracts to verify."
+  extraction_method: To be confirmed
+  default_language_key: E
+  has_client_column: true
+  client_column: MANDT
+defaults:
+  source_type: standard_erp_knowledge
+  confidence: 0.5
+  validation_status: requires_validation
+  source_reference: "Assumed from standard SAP ECC catalogue — NOT read from SAP EBS"
+confidence_cap: 0.5
+force_status: requires_validation

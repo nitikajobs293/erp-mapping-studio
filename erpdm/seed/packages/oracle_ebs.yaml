@@ -1,0 +1,152 @@
+# Oracle E-Business Suite R12 — Purchasing sample (standard knowledge, requires validation).
+erp:
+  code: ORACLE_EBS
+  name: Oracle E-Business Suite R12
+  vendor: Oracle
+  version_label: R12.2
+  category: ERP
+  description: Oracle EBS. Multi-org tables (*_ALL) are partitioned by ORG_ID (operating unit).
+  extraction_method: Oracle GoldenGate / log-based CDC or LAST_UPDATE_DATE incremental extraction
+  has_client_column: false
+defaults:
+  source_type: standard_erp_knowledge
+  confidence: 0.85
+  validation_status: requires_validation
+  source_reference: Oracle EBS eTRM (generic knowledge) — validate against your instance
+modules:
+  - {code: PO, name: Purchasing}
+  - {code: INV, name: Inventory}
+  - {code: AP, name: Payables}
+  - {code: HR, name: Human Resources / Organizations}
+processes:
+  - name: Procure to Pay — Purchase Order to Receipt
+    domain: Procurement
+    module: PO
+    description: Standard purchase orders with shipments and receiving transactions.
+    flow_steps: [PO header (PO_HEADERS_ALL), PO lines (PO_LINES_ALL), Shipments (PO_LINE_LOCATIONS_ALL), Receipts (RCV_TRANSACTIONS), Invoice matching (AP)]
+tables:
+  - name: PO_HEADERS_ALL
+    description: Purchase order / agreement headers (all operating units)
+    module: PO
+    table_class: transaction
+    business_entity: Purchase Order
+    change_tracking: {columns: [LAST_UPDATE_DATE], reliable: true, note: "Standard WHO column with time. Hard deletes are not visible to timestamp extraction."}
+    columns:
+      - {name: PO_HEADER_ID, data_type: NUMBER, is_pk: true, description: Document header unique identifier}
+      - {name: SEGMENT1, data_type: VARCHAR2, length: 20, description: Document number, business_name: Purchase Order Number}
+      - {name: TYPE_LOOKUP_CODE, data_type: VARCHAR2, length: 25, description: Document type (STANDARD, BLANKET, ...), business_name: PO Type}
+      - {name: VENDOR_ID, data_type: NUMBER, description: Supplier unique identifier}
+      - {name: VENDOR_SITE_ID, data_type: NUMBER, description: Supplier site unique identifier}
+      - {name: ORG_ID, data_type: NUMBER, description: Operating unit unique identifier, business_name: Operating Unit}
+      - {name: CURRENCY_CODE, data_type: VARCHAR2, length: 15, description: Currency, business_name: Currency}
+      - {name: AUTHORIZATION_STATUS, data_type: VARCHAR2, length: 25, description: Authorization status, business_name: Approval Status}
+      - {name: CREATION_DATE, data_type: DATE, description: Standard who column, business_name: PO Created On}
+      - {name: LAST_UPDATE_DATE, data_type: DATE, description: Standard who column}
+  - name: PO_LINES_ALL
+    description: Purchase document lines
+    module: PO
+    table_class: transaction
+    business_entity: Purchase Order Line
+    change_tracking: {columns: [LAST_UPDATE_DATE], reliable: true}
+    columns:
+      - {name: PO_LINE_ID, data_type: NUMBER, is_pk: true, description: Document line unique identifier}
+      - {name: PO_HEADER_ID, data_type: NUMBER, description: Document header unique identifier}
+      - {name: LINE_NUM, data_type: NUMBER, description: Line number, business_name: PO Line}
+      - {name: ITEM_ID, data_type: NUMBER, description: Item unique identifier}
+      - {name: ITEM_DESCRIPTION, data_type: VARCHAR2, length: 240, description: Item description, business_name: PO Line Description}
+      - {name: QUANTITY, data_type: NUMBER, description: Quantity ordered, business_name: PO Quantity}
+      - {name: UNIT_PRICE, data_type: NUMBER, description: Unit price, business_name: Net Price}
+      - {name: UNIT_MEAS_LOOKUP_CODE, data_type: VARCHAR2, length: 25, description: Unit of measure}
+      - {name: ORG_ID, data_type: NUMBER, description: Operating unit unique identifier}
+      - {name: LAST_UPDATE_DATE, data_type: DATE, description: Standard who column}
+  - name: PO_LINE_LOCATIONS_ALL
+    description: Document shipment schedules
+    module: PO
+    table_class: transaction
+    change_tracking: {columns: [LAST_UPDATE_DATE], reliable: true}
+    columns:
+      - {name: LINE_LOCATION_ID, data_type: NUMBER, is_pk: true, description: Document shipment schedule unique identifier}
+      - {name: PO_LINE_ID, data_type: NUMBER, description: Document line unique identifier}
+      - {name: PO_HEADER_ID, data_type: NUMBER, description: Document header unique identifier}
+      - {name: SHIP_TO_ORGANIZATION_ID, data_type: NUMBER, description: Ship-to organization unique identifier, business_name: Ship-to Organization}
+      - {name: QUANTITY, data_type: NUMBER, description: Quantity ordered on the shipment}
+      - {name: QUANTITY_RECEIVED, data_type: NUMBER, description: Quantity received, business_name: Received Quantity}
+      - {name: NEED_BY_DATE, data_type: DATE, description: Need-by date, business_name: Need By Date}
+      - {name: LAST_UPDATE_DATE, data_type: DATE, description: Standard who column}
+  - name: RCV_TRANSACTIONS
+    description: Receiving transactions
+    module: PO
+    table_class: transaction
+    change_tracking: {columns: [LAST_UPDATE_DATE], reliable: true}
+    columns:
+      - {name: TRANSACTION_ID, data_type: NUMBER, is_pk: true, description: Receiving transaction unique identifier}
+      - {name: TRANSACTION_TYPE, data_type: VARCHAR2, length: 25, description: Receiving transaction type (RECEIVE, DELIVER, RETURN TO VENDOR, ...), business_name: Receipt Transaction Type}
+      - {name: TRANSACTION_DATE, data_type: DATE, description: Transaction date, business_name: Receipt Date}
+      - {name: QUANTITY, data_type: NUMBER, description: Transaction quantity, business_name: Receipt Quantity}
+      - {name: PO_HEADER_ID, data_type: NUMBER, description: Purchase order header unique identifier}
+      - {name: PO_LINE_ID, data_type: NUMBER, description: Purchase order line unique identifier}
+      - {name: PO_LINE_LOCATION_ID, data_type: NUMBER, description: Purchase order shipment unique identifier}
+      - {name: ORGANIZATION_ID, data_type: NUMBER, description: Destination organization unique identifier}
+      - {name: LAST_UPDATE_DATE, data_type: DATE, description: Standard who column}
+  - name: AP_SUPPLIERS
+    description: Supplier header (R12)
+    module: AP
+    table_class: master
+    business_entity: Supplier
+    change_tracking: {columns: [LAST_UPDATE_DATE], reliable: true}
+    columns:
+      - {name: VENDOR_ID, data_type: NUMBER, is_pk: true, description: Supplier unique identifier}
+      - {name: VENDOR_NAME, data_type: VARCHAR2, length: 240, description: Supplier name, business_name: Vendor Name}
+      - {name: SEGMENT1, data_type: VARCHAR2, length: 30, description: Supplier number, business_name: Vendor Number}
+      - {name: ENABLED_FLAG, data_type: VARCHAR2, length: 1, description: Key flexfield enabled flag}
+      - {name: LAST_UPDATE_DATE, data_type: DATE, description: Standard who column}
+  - name: MTL_SYSTEM_ITEMS_B
+    description: Inventory item definitions (one row per item per inventory organization)
+    module: INV
+    table_class: master
+    business_entity: Item
+    change_tracking: {columns: [LAST_UPDATE_DATE], reliable: true}
+    columns:
+      - {name: INVENTORY_ITEM_ID, data_type: NUMBER, is_pk: true, description: Inventory item identifier}
+      - {name: ORGANIZATION_ID, data_type: NUMBER, is_pk: true, description: Organization identifier}
+      - {name: SEGMENT1, data_type: VARCHAR2, length: 40, description: Item number (key flexfield segment), business_name: Material Number}
+      - {name: DESCRIPTION, data_type: VARCHAR2, length: 240, description: Item description, business_name: Material Description}
+      - {name: PRIMARY_UOM_CODE, data_type: VARCHAR2, length: 3, description: Primary unit of measure}
+      - {name: ITEM_TYPE, data_type: VARCHAR2, length: 30, description: User-defined item type, business_name: Material Type}
+      - {name: LAST_UPDATE_DATE, data_type: DATE, description: Standard who column}
+  - name: HR_ALL_ORGANIZATION_UNITS
+    description: Organization units (including inventory organizations)
+    module: HR
+    table_class: master
+    business_entity: Organization
+    columns:
+      - {name: ORGANIZATION_ID, data_type: NUMBER, is_pk: true, description: Organization identifier}
+      - {name: NAME, data_type: VARCHAR2, length: 240, description: Organization name, business_name: Plant Name}
+      - {name: TYPE, data_type: VARCHAR2, length: 30, description: Organization type}
+relationships:
+  - {from_table: PO_HEADERS_ALL, to_table: PO_LINES_ALL, join_columns: [{from: PO_HEADER_ID, to: PO_HEADER_ID}], join_type: INNER, is_mandatory: true, cardinality: "1:N", relationship_type: header_item, description: PO header to lines, business_purpose: PO lines, confidence: 0.95}
+  - {from_table: PO_LINES_ALL, to_table: PO_LINE_LOCATIONS_ALL, join_columns: [{from: PO_LINE_ID, to: PO_LINE_ID}], join_type: LEFT, cardinality: "1:N", relationship_type: master_detail, description: PO line to shipment schedules, business_purpose: Ship-to org, need-by date and received quantity, confidence: 0.95}
+  - {from_table: PO_HEADERS_ALL, to_table: AP_SUPPLIERS, join_columns: [{from: VENDOR_ID, to: VENDOR_ID}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Supplier of the PO, business_purpose: Supplier name / number, confidence: 0.95}
+  - {from_table: PO_LINE_LOCATIONS_ALL, to_table: RCV_TRANSACTIONS, join_columns: [{from: LINE_LOCATION_ID, to: PO_LINE_LOCATION_ID}], join_type: LEFT, cardinality: "1:N", relationship_type: document_flow, description: Receiving transactions against a shipment, business_purpose: Receipts; filter TRANSACTION_TYPE = 'RECEIVE' for receipts, confidence: 0.9}
+  - {from_table: PO_LINE_LOCATIONS_ALL, to_table: HR_ALL_ORGANIZATION_UNITS, join_columns: [{from: SHIP_TO_ORGANIZATION_ID, to: ORGANIZATION_ID}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Ship-to inventory organization, business_purpose: Organization (plant) name, confidence: 0.9}
+  - {from_table: PO_LINES_ALL, to_table: MTL_SYSTEM_ITEMS_B, join_columns: [{from: ITEM_ID, to: INVENTORY_ITEM_ID}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: "Item of the PO line. MTL_SYSTEM_ITEMS_B is per organization: ORGANIZATION_ID must also be restricted (ship-to org or item master org), otherwise rows duplicate.", business_purpose: Item number / description, confidence: 0.6}
+transactions:
+  - code: POXPOEPO
+    name: Enter Purchase Orders (form)
+    transaction_type: screen
+    module: PO
+    process: Procure to Pay — Purchase Order to Receipt
+    business_object: Purchase order
+    description: Oracle Forms purchase order entry/inquiry form (form name to be validated on your instance).
+    root_table: PO_LINES_ALL
+    default_columns: [PO_HEADERS_ALL.SEGMENT1, PO_LINES_ALL.LINE_NUM, PO_HEADERS_ALL.TYPE_LOOKUP_CODE, AP_SUPPLIERS.VENDOR_NAME, PO_LINES_ALL.ITEM_DESCRIPTION, PO_LINES_ALL.QUANTITY, PO_LINES_ALL.UNIT_PRICE, PO_HEADERS_ALL.CURRENCY_CODE]
+    tables: [{table: PO_HEADERS_ALL, role: primary}, {table: PO_LINES_ALL, role: secondary}, {table: AP_SUPPLIERS, role: lookup}, {table: PO_LINE_LOCATIONS_ALL, role: secondary}]
+use_cases:
+  - name: Purchase Order to Receipt
+    domain: Procurement
+    description: PO lines with shipments, supplier and receipts.
+    keywords: [purchase order, po, supplier, vendor, receipt, receiving, procurement]
+    tables: [PO_HEADERS_ALL, PO_LINES_ALL, PO_LINE_LOCATIONS_ALL, AP_SUPPLIERS]
+    optional_tables: [RCV_TRANSACTIONS, HR_ALL_ORGANIZATION_UNITS]
+    root_table: PO_LINES_ALL
+    grain: One row per PO line (shipments aggregated or one row per shipment)

@@ -1,0 +1,635 @@
+# SAP ECC 6.0 — standard (non-customised) data dictionary knowledge.
+# Provenance: standard_erp_knowledge. Everything here is GENERIC SAP knowledge and must be validated
+# against your own system's DDIC (DD02L/DD03L/DD05S extracts) before being treated as verified.
+erp:
+  code: SAP_ECC
+  name: SAP ECC 6.0
+  vendor: SAP
+  version_label: ECC 6.0 (EHP7/8)
+  category: ERP
+  description: SAP ERP Central Component. Reference catalogue of standard tables (customer-specific Z-tables not included).
+  extraction_method: SAP ODP / SLT replication or SAP Data Services / Fivetran / Qlik Replicate into Snowflake RAW
+  default_language_key: E
+  has_client_column: true
+  client_column: MANDT
+defaults:
+  source_type: standard_erp_knowledge
+  confidence: 0.85
+  validation_status: requires_validation
+  source_reference: SAP standard data dictionary (SE11) — generic knowledge, not read from your system
+modules:
+  - {code: PM, name: Plant Maintenance}
+  - {code: MM, name: Materials Management}
+  - {code: SD, name: Sales and Distribution}
+  - {code: LE, name: Logistics Execution}
+  - {code: CA, name: Cross-Application}
+processes:
+  - name: Equipment and Serial Number Management
+    domain: Equipment Management
+    module: PM
+    sub_process: Serialised equipment master maintenance
+    description: Equipment master records are created for serialised materials (material + serial number) and for maintainable technical objects.
+    flow_steps: [Material master with serial number profile, Goods movement assigns serial number, Equipment record created/updated (EQUI), Time-dependent installation/location data (EQUZ/ILOA), Stock segment updated (EQBS), Status maintained (JEST)]
+  - name: Order to Delivery
+    domain: Sales and Distribution
+    module: SD
+    sub_process: Sales order fulfilment
+    description: Sales order is created, referenced by an outbound delivery, picked and goods-issued.
+    flow_steps: [Sales order header (VBAK), Sales order items (VBAP), Outbound delivery header (LIKP), Delivery items (LIPS) referencing order items, Document flow recorded (VBFA), Goods issue]
+  - name: Procure to Pay — Purchase Order to Goods Receipt
+    domain: Procurement
+    module: MM
+    sub_process: Purchase order and receipt
+    description: Purchase order raised to a vendor and received via goods receipt (material document).
+    flow_steps: [Purchase order header (EKKO), Purchase order items (EKPO), Goods receipt material document (MKPF/MSEG), PO history updated (EKBE), Invoice receipt]
+  - name: Inventory Movements
+    domain: Inventory Management
+    module: MM
+    sub_process: Goods movements
+    description: Every goods movement posts a material document (header MKPF, items MSEG).
+    flow_steps: [Goods movement posted, Material document header (MKPF), Material document items (MSEG), Stock tables updated]
+tables:
+  # ------------------------------------------------------------------ PM / equipment
+  - name: EQUI
+    description: Equipment master data
+    module: PM
+    table_class: master
+    business_entity: Equipment
+    change_tracking: {columns: [AEDAT], reliable: false, note: "AEDAT is a change DATE (no time) and is not updated by every change (e.g. status-only changes live in JEST; time-dependent data in EQUZ). Use it with a lookback window or prefer log-based CDC (SLT/ODP)."}
+    delete_strategy: Physical deletes are rare (archiving, object PM_EQUI). Logical deletion via status DLFL (I0076) in JEST. Use CDC delete markers or periodic full-key reconciliation.
+    soft_delete_rule: "EXISTS (SELECT 1 FROM JEST j WHERE j.MANDT = {alias}.MANDT AND j.OBJNR = {alias}.OBJNR AND j.STAT = 'I0076' AND j.INACT = '')"
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: EQUNR, data_type: CHAR, length: 18, is_pk: true, description: Equipment number, business_name: Equipment Number}
+      - {name: ERDAT, data_type: DATS, length: 8, description: Date on which the record was created, business_name: Created On}
+      - {name: ERNAM, data_type: CHAR, length: 12, description: Name of person who created the object, business_name: Created By}
+      - {name: AEDAT, data_type: DATS, length: 8, description: Last changed on, business_name: Last Changed On}
+      - {name: AENAM, data_type: CHAR, length: 12, description: Name of person who changed object, business_name: Changed By}
+      - {name: EQTYP, data_type: CHAR, length: 1, description: Equipment category, business_name: Equipment Category, check_table: T370T}
+      - {name: EQART, data_type: CHAR, length: 10, description: Type of technical object, business_name: Object Type}
+      - {name: INVNR, data_type: CHAR, length: 25, description: Inventory number, business_name: Inventory Number}
+      - {name: GROES, data_type: CHAR, length: 18, description: Size/dimension, business_name: Size Dimension}
+      - {name: BRGEW, data_type: QUAN, length: 13, decimals: 3, description: Gross weight, business_name: Gross Weight}
+      - {name: GEWEI, data_type: UNIT, length: 3, description: Weight unit, business_name: Weight Unit}
+      - {name: ANSDT, data_type: DATS, length: 8, description: Acquisition date, business_name: Acquisition Date}
+      - {name: ANSWT, data_type: CURR, length: 13, decimals: 2, description: Acquisition value, business_name: Acquisition Value}
+      - {name: WAERS, data_type: CUKY, length: 5, description: Currency key, business_name: Currency}
+      - {name: HERST, data_type: CHAR, length: 30, description: Manufacturer of asset, business_name: Manufacturer}
+      - {name: HERLD, data_type: CHAR, length: 3, description: Country of manufacture, business_name: Country of Manufacture}
+      - {name: BAUJJ, data_type: CHAR, length: 4, description: Year of construction, business_name: Construction Year}
+      - {name: BAUMM, data_type: CHAR, length: 2, description: Month of construction, business_name: Construction Month}
+      - {name: TYPBZ, data_type: CHAR, length: 20, description: Manufacturer model number, business_name: Model Number}
+      - {name: SERGE, data_type: CHAR, length: 30, description: Manufacturer serial number, business_name: Manufacturer Serial Number}
+      - {name: MAPAR, data_type: CHAR, length: 30, description: Manufacturer part number, business_name: Manufacturer Part Number}
+      - {name: MATNR, data_type: CHAR, length: 18, description: Material number (serialised material), business_name: Material Number}
+      - {name: SERNR, data_type: CHAR, length: 18, description: Serial number, business_name: Serial Number}
+      - {name: INBDT, data_type: DATS, length: 8, description: Start-up date of the technical object, business_name: Start-up Date}
+      - {name: OBJNR, data_type: CHAR, length: 22, description: Object number (status / CO link), business_name: Object Number}
+  - name: EQKT
+    description: Equipment short texts (language dependent)
+    module: PM
+    table_class: text
+    business_entity: Equipment
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: EQUNR, data_type: CHAR, length: 18, is_pk: true, description: Equipment number}
+      - {name: SPRAS, data_type: LANG, length: 1, is_pk: true, description: Language key}
+      - {name: EQKTX, data_type: CHAR, length: 40, description: Description of technical object, business_name: Equipment Description}
+      - {name: KZLTX, data_type: CHAR, length: 1, description: Indicator - long text exists}
+  - name: EQUZ
+    description: Equipment time segment (time-dependent installation and planning data)
+    module: PM
+    table_class: master
+    business_entity: Equipment
+    default_filter: "{alias}.DATBI = '99991231'"
+    notes: Time-dependent. The current segment has DATBI = '99991231'. Historical segments are needed for SCD Type 2 rebuilds.
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: EQUNR, data_type: CHAR, length: 18, is_pk: true, description: Equipment number}
+      - {name: DATBI, data_type: DATS, length: 8, is_pk: true, description: Valid-to date, business_name: Valid To}
+      - {name: EQLFN, data_type: NUMC, length: 3, is_pk: true, description: Consecutive number of equipment usage period}
+      - {name: ERDAT, data_type: DATS, length: 8, description: Date on which the record was created}
+      - {name: AEDAT, data_type: DATS, length: 8, description: Last changed on}
+      - {name: IWERK, data_type: CHAR, length: 4, description: Maintenance planning plant, business_name: Planning Plant, check_table: T001W}
+      - {name: INGRP, data_type: CHAR, length: 3, description: Maintenance planner group, business_name: Planner Group}
+      - {name: TIDNR, data_type: CHAR, length: 25, description: Technical identification number, business_name: Technical Identification Number}
+      - {name: HEQUI, data_type: CHAR, length: 18, description: Superordinate equipment, business_name: Superior Equipment}
+      - {name: ILOAN, data_type: CHAR, length: 12, description: Location and account assignment for technical object}
+  - name: ILOA
+    description: PM object location and account assignment
+    module: PM
+    table_class: master
+    business_entity: Equipment
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: ILOAN, data_type: CHAR, length: 12, is_pk: true, description: Location and account assignment for technical object}
+      - {name: TPLNR, data_type: CHAR, length: 30, description: Functional location, business_name: Functional Location}
+      - {name: SWERK, data_type: CHAR, length: 4, description: Maintenance plant, business_name: Maintenance Plant, check_table: T001W}
+      - {name: STORT, data_type: CHAR, length: 10, description: Location of maintenance object, business_name: Location}
+      - {name: MSGRP, data_type: CHAR, length: 8, description: Room, business_name: Room}
+      - {name: BEBER, data_type: CHAR, length: 3, description: Plant section, business_name: Plant Section}
+      - {name: ABCKZ, data_type: CHAR, length: 1, description: ABC indicator for technical object, business_name: ABC Indicator}
+      - {name: EQFNR, data_type: CHAR, length: 30, description: Sort field, business_name: Sort Field}
+      - {name: BUKRS, data_type: CHAR, length: 4, description: Company code, business_name: Company Code}
+      - {name: KOSTL, data_type: CHAR, length: 10, description: Cost center, business_name: Cost Center}
+      - {name: ANLNR, data_type: CHAR, length: 12, description: Main asset number, business_name: Asset Number}
+  - name: EQBS
+    description: Serial number stock segment (current stock location of serialised equipment)
+    module: PM
+    table_class: master
+    business_entity: Equipment
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: EQUNR, data_type: CHAR, length: 18, is_pk: true, description: Equipment number}
+      - {name: B_WERK, data_type: CHAR, length: 4, description: Plant (stock), business_name: Plant, check_table: T001W}
+      - {name: B_LAGER, data_type: CHAR, length: 4, description: Storage location, business_name: Storage Location}
+      - {name: B_CHARGE, data_type: CHAR, length: 10, description: Batch number, business_name: Batch}
+      - {name: LBBSA, data_type: CHAR, length: 2, description: Stock type of goods movement, business_name: Stock Type}
+      - {name: SOBKZ, data_type: CHAR, length: 1, description: Special stock indicator, business_name: Special Stock Indicator}
+      - {name: KUNNR, data_type: CHAR, length: 10, description: Customer (special stock), business_name: Customer Number}
+      - {name: LIFNR, data_type: CHAR, length: 10, description: Vendor (special stock), business_name: Vendor Number}
+  - name: T370T
+    description: Equipment category texts
+    module: PM
+    table_class: config
+    confidence: 0.75
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: SPRAS, data_type: LANG, length: 1, is_pk: true, description: Language key}
+      - {name: EQTYP, data_type: CHAR, length: 1, is_pk: true, description: Equipment category}
+      - {name: TYPTX, data_type: CHAR, length: 20, description: Equipment category text, business_name: Equipment Category Description}
+  - name: JEST
+    description: Individual object status
+    module: CA
+    table_class: status
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: OBJNR, data_type: CHAR, length: 22, is_pk: true, description: Object number}
+      - {name: STAT, data_type: CHAR, length: 5, is_pk: true, description: Object status (I* = system, E* = user)}
+      - {name: INACT, data_type: CHAR, length: 1, description: Indicator - status is inactive}
+      - {name: CHGNR, data_type: NUMC, length: 3, description: Change number}
+  - name: TJ02T
+    description: System status texts (client-independent)
+    module: CA
+    table_class: config
+    columns:
+      - {name: ISTAT, data_type: CHAR, length: 5, is_pk: true, description: System status}
+      - {name: SPRAS, data_type: LANG, length: 1, is_pk: true, description: Language key}
+      - {name: TXT04, data_type: CHAR, length: 4, description: Status short text, business_name: System Status}
+      - {name: TXT30, data_type: CHAR, length: 30, description: Status description, business_name: System Status Description}
+  # ------------------------------------------------------------------ MM master
+  - name: MARA
+    description: General material data
+    module: MM
+    table_class: master
+    business_entity: Material
+    change_tracking: {columns: [LAEDA], reliable: false, note: "LAEDA is a date only and not updated for every dependent-table change. Use CDC or lookback window."}
+    soft_delete_rule: "{alias}.LVORM = 'X'"
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: MATNR, data_type: CHAR, length: 18, is_pk: true, description: Material number, business_name: Material Number}
+      - {name: ERSDA, data_type: DATS, length: 8, description: Created on, business_name: Material Created On}
+      - {name: LAEDA, data_type: DATS, length: 8, description: Date of last change, business_name: Material Last Changed On}
+      - {name: LVORM, data_type: CHAR, length: 1, description: Flag material for deletion at client level, business_name: Deletion Flag}
+      - {name: MTART, data_type: CHAR, length: 4, description: Material type, business_name: Material Type}
+      - {name: MATKL, data_type: CHAR, length: 9, description: Material group, business_name: Material Group}
+      - {name: MEINS, data_type: UNIT, length: 3, description: Base unit of measure, business_name: Base Unit of Measure}
+      - {name: BRGEW, data_type: QUAN, length: 13, decimals: 3, description: Gross weight}
+      - {name: NTGEW, data_type: QUAN, length: 13, decimals: 3, description: Net weight}
+      - {name: GEWEI, data_type: UNIT, length: 3, description: Weight unit}
+      - {name: MFRNR, data_type: CHAR, length: 10, description: Manufacturer number, business_name: Material Manufacturer Number}
+      - {name: MFRPN, data_type: CHAR, length: 40, description: Manufacturer part number, business_name: Material Manufacturer Part Number}
+  - name: MAKT
+    description: Material descriptions
+    module: MM
+    table_class: text
+    business_entity: Material
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: MATNR, data_type: CHAR, length: 18, is_pk: true, description: Material number}
+      - {name: SPRAS, data_type: LANG, length: 1, is_pk: true, description: Language key}
+      - {name: MAKTX, data_type: CHAR, length: 40, description: Material description, business_name: Material Description}
+  - name: MARC
+    description: Plant data for material
+    module: MM
+    table_class: master
+    business_entity: Material Plant
+    soft_delete_rule: "{alias}.LVORM = 'X'"
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: MATNR, data_type: CHAR, length: 18, is_pk: true, description: Material number}
+      - {name: WERKS, data_type: CHAR, length: 4, is_pk: true, description: Plant, business_name: Material Plant}
+      - {name: LVORM, data_type: CHAR, length: 1, description: Flag material for deletion at plant level}
+      - {name: MMSTA, data_type: CHAR, length: 2, description: Plant-specific material status, business_name: Plant Material Status}
+      - {name: EKGRP, data_type: CHAR, length: 3, description: Purchasing group, business_name: Purchasing Group}
+      - {name: DISPO, data_type: CHAR, length: 3, description: MRP controller, business_name: MRP Controller}
+      - {name: SERNP, data_type: CHAR, length: 4, description: Serial number profile, business_name: Serial Number Profile}
+  - name: T001W
+    description: Plants / branches
+    module: CA
+    table_class: config
+    business_entity: Plant
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: WERKS, data_type: CHAR, length: 4, is_pk: true, description: Plant, business_name: Plant Code}
+      - {name: NAME1, data_type: CHAR, length: 30, description: Plant name, business_name: Plant Name}
+      - {name: BWKEY, data_type: CHAR, length: 4, description: Valuation area}
+      - {name: LAND1, data_type: CHAR, length: 3, description: Country key, business_name: Plant Country}
+      - {name: REGIO, data_type: CHAR, length: 3, description: Region, business_name: Plant Region}
+      - {name: ORT01, data_type: CHAR, length: 25, description: City, business_name: Plant City}
+  # ------------------------------------------------------------------ SD / LE
+  - name: KNA1
+    description: General data in customer master
+    module: SD
+    table_class: master
+    business_entity: Customer
+    soft_delete_rule: "{alias}.LOEVM = 'X'"
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: KUNNR, data_type: CHAR, length: 10, is_pk: true, description: Customer number, business_name: Customer Number}
+      - {name: NAME1, data_type: CHAR, length: 35, description: Name 1, business_name: Customer Name}
+      - {name: LAND1, data_type: CHAR, length: 3, description: Country key, business_name: Customer Country}
+      - {name: ORT01, data_type: CHAR, length: 35, description: City, business_name: Customer City}
+      - {name: LOEVM, data_type: CHAR, length: 1, description: Central deletion flag}
+      - {name: ERDAT, data_type: DATS, length: 8, description: Created on}
+  - name: VBAK
+    description: Sales document header data
+    module: SD
+    table_class: transaction
+    business_entity: Sales Order
+    change_tracking: {columns: [AEDAT], reliable: false, note: "AEDAT is a date only. Combine with ERDAT and a lookback window, or use CDC."}
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: VBELN, data_type: CHAR, length: 10, is_pk: true, description: Sales document, business_name: Sales Order Number}
+      - {name: ERDAT, data_type: DATS, length: 8, description: Created on, business_name: Order Created On}
+      - {name: ERZET, data_type: TIMS, length: 6, description: Entry time}
+      - {name: AEDAT, data_type: DATS, length: 8, description: Changed on}
+      - {name: AUART, data_type: CHAR, length: 4, description: Sales document type, business_name: Order Type}
+      - {name: VKORG, data_type: CHAR, length: 4, description: Sales organization, business_name: Sales Organization}
+      - {name: VTWEG, data_type: CHAR, length: 2, description: Distribution channel, business_name: Distribution Channel}
+      - {name: SPART, data_type: CHAR, length: 2, description: Division, business_name: Division}
+      - {name: KUNNR, data_type: CHAR, length: 10, description: Sold-to party, business_name: Sold-to Customer}
+      - {name: NETWR, data_type: CURR, length: 15, decimals: 2, description: Net value in document currency, business_name: Order Net Value}
+      - {name: WAERK, data_type: CUKY, length: 5, description: SD document currency, business_name: Document Currency}
+  - name: VBAP
+    description: Sales document item data
+    module: SD
+    table_class: transaction
+    business_entity: Sales Order Item
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: VBELN, data_type: CHAR, length: 10, is_pk: true, description: Sales document}
+      - {name: POSNR, data_type: NUMC, length: 6, is_pk: true, description: Sales document item, business_name: Sales Order Item}
+      - {name: MATNR, data_type: CHAR, length: 18, description: Material number}
+      - {name: ARKTX, data_type: CHAR, length: 40, description: Short text for sales order item, business_name: Item Description}
+      - {name: PSTYV, data_type: CHAR, length: 4, description: Sales document item category, business_name: Item Category}
+      - {name: KWMENG, data_type: QUAN, length: 15, decimals: 3, description: Cumulative order quantity in sales units, business_name: Order Quantity}
+      - {name: VRKME, data_type: UNIT, length: 3, description: Sales unit}
+      - {name: NETWR, data_type: CURR, length: 15, decimals: 2, description: Net value of the order item, business_name: Item Net Value}
+      - {name: WERKS, data_type: CHAR, length: 4, description: Plant (own or external), business_name: Delivering Plant}
+      - {name: ABGRU, data_type: CHAR, length: 2, description: Reason for rejection, business_name: Rejection Reason}
+      - {name: ERDAT, data_type: DATS, length: 8, description: Created on}
+  - name: LIKP
+    description: SD document - delivery header data
+    module: LE
+    table_class: transaction
+    business_entity: Delivery
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: VBELN, data_type: CHAR, length: 10, is_pk: true, description: Delivery, business_name: Delivery Number}
+      - {name: ERDAT, data_type: DATS, length: 8, description: Created on}
+      - {name: AEDAT, data_type: DATS, length: 8, description: Changed on}
+      - {name: LFART, data_type: CHAR, length: 4, description: Delivery type, business_name: Delivery Type}
+      - {name: VSTEL, data_type: CHAR, length: 4, description: Shipping point / receiving point, business_name: Shipping Point}
+      - {name: KUNNR, data_type: CHAR, length: 10, description: Ship-to party, business_name: Ship-to Customer}
+      - {name: LFDAT, data_type: DATS, length: 8, description: Delivery date, business_name: Planned Delivery Date}
+      - {name: WADAT_IST, data_type: DATS, length: 8, description: Actual goods movement date, business_name: Actual Goods Issue Date}
+  - name: LIPS
+    description: SD document - delivery item data
+    module: LE
+    table_class: transaction
+    business_entity: Delivery Item
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: VBELN, data_type: CHAR, length: 10, is_pk: true, description: Delivery}
+      - {name: POSNR, data_type: NUMC, length: 6, is_pk: true, description: Delivery item, business_name: Delivery Item}
+      - {name: MATNR, data_type: CHAR, length: 18, description: Material number}
+      - {name: WERKS, data_type: CHAR, length: 4, description: Plant, business_name: Shipping Plant}
+      - {name: LGORT, data_type: CHAR, length: 4, description: Storage location}
+      - {name: CHARG, data_type: CHAR, length: 10, description: Batch number}
+      - {name: LFIMG, data_type: QUAN, length: 13, decimals: 3, description: Actual quantity delivered (in sales units), business_name: Delivered Quantity}
+      - {name: VRKME, data_type: UNIT, length: 3, description: Sales unit}
+      - {name: VGBEL, data_type: CHAR, length: 10, description: Document number of the reference document}
+      - {name: VGPOS, data_type: NUMC, length: 6, description: Item number of the reference item}
+  - name: VBFA
+    description: Sales document flow
+    module: SD
+    table_class: document_flow
+    notes: "Preceding (VBELV/POSNV) to subsequent (VBELN/POSNN) document links. VBTYP_N = subsequent document category (e.g. J = delivery, M = invoice). In S/4HANA the key of VBFA changed — do not reuse this definition there."
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: VBELV, data_type: CHAR, length: 10, is_pk: true, description: Preceding sales and distribution document}
+      - {name: POSNV, data_type: NUMC, length: 6, is_pk: true, description: Preceding item of an SD document}
+      - {name: VBELN, data_type: CHAR, length: 10, is_pk: true, description: Subsequent sales and distribution document}
+      - {name: POSNN, data_type: NUMC, length: 6, is_pk: true, description: Subsequent item of an SD document}
+      - {name: VBTYP_N, data_type: CHAR, length: 1, is_pk: true, description: Document category of subsequent document}
+      - {name: VBTYP_V, data_type: CHAR, length: 1, description: Document category of preceding SD document}
+      - {name: RFMNG, data_type: QUAN, length: 15, decimals: 3, description: Referenced quantity in base unit of measure}
+      - {name: ERDAT, data_type: DATS, length: 8, description: Created on}
+  # ------------------------------------------------------------------ MM purchasing / inventory
+  - name: LFA1
+    description: Vendor master (general section)
+    module: MM
+    table_class: master
+    business_entity: Vendor
+    soft_delete_rule: "{alias}.LOEVM = 'X'"
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: LIFNR, data_type: CHAR, length: 10, is_pk: true, description: Account number of vendor, business_name: Vendor Number}
+      - {name: NAME1, data_type: CHAR, length: 35, description: Name 1, business_name: Vendor Name}
+      - {name: LAND1, data_type: CHAR, length: 3, description: Country key, business_name: Vendor Country}
+      - {name: LOEVM, data_type: CHAR, length: 1, description: Central deletion flag}
+  - name: EKKO
+    description: Purchasing document header
+    module: MM
+    table_class: transaction
+    business_entity: Purchase Order
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: EBELN, data_type: CHAR, length: 10, is_pk: true, description: Purchasing document number, business_name: Purchase Order Number}
+      - {name: BUKRS, data_type: CHAR, length: 4, description: Company code}
+      - {name: BSART, data_type: CHAR, length: 4, description: Purchasing document type, business_name: PO Type}
+      - {name: LIFNR, data_type: CHAR, length: 10, description: Vendor account number}
+      - {name: EKORG, data_type: CHAR, length: 4, description: Purchasing organization, business_name: Purchasing Organization}
+      - {name: EKGRP, data_type: CHAR, length: 3, description: Purchasing group}
+      - {name: BEDAT, data_type: DATS, length: 8, description: Purchasing document date, business_name: PO Date}
+      - {name: AEDAT, data_type: DATS, length: 8, description: Record created on (EKKO-AEDAT is the creation date)}
+      - {name: WAERS, data_type: CUKY, length: 5, description: Currency key}
+  - name: EKPO
+    description: Purchasing document item
+    module: MM
+    table_class: transaction
+    business_entity: Purchase Order Item
+    soft_delete_rule: "{alias}.LOEKZ IN ('L', 'S')"
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: EBELN, data_type: CHAR, length: 10, is_pk: true, description: Purchasing document number}
+      - {name: EBELP, data_type: NUMC, length: 5, is_pk: true, description: Item number of purchasing document, business_name: PO Item}
+      - {name: LOEKZ, data_type: CHAR, length: 1, description: Deletion indicator in purchasing document}
+      - {name: MATNR, data_type: CHAR, length: 18, description: Material number}
+      - {name: TXZ01, data_type: CHAR, length: 40, description: Short text, business_name: PO Item Text}
+      - {name: WERKS, data_type: CHAR, length: 4, description: Plant, business_name: Receiving Plant}
+      - {name: LGORT, data_type: CHAR, length: 4, description: Storage location}
+      - {name: MENGE, data_type: QUAN, length: 13, decimals: 3, description: Purchase order quantity, business_name: PO Quantity}
+      - {name: MEINS, data_type: UNIT, length: 3, description: Purchase order unit of measure}
+      - {name: NETPR, data_type: CURR, length: 11, decimals: 2, description: Net price in purchasing document, business_name: Net Price}
+      - {name: AEDAT, data_type: DATS, length: 8, description: Item change date}
+  - name: EKBE
+    description: History per purchasing document
+    module: MM
+    table_class: transaction
+    business_entity: PO History
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: EBELN, data_type: CHAR, length: 10, is_pk: true, description: Purchasing document number}
+      - {name: EBELP, data_type: NUMC, length: 5, is_pk: true, description: Item number of purchasing document}
+      - {name: ZEKKN, data_type: NUMC, length: 2, is_pk: true, description: Sequential number of account assignment}
+      - {name: VGABE, data_type: CHAR, length: 1, is_pk: true, description: Transaction/event type (1 = goods receipt, 2 = invoice receipt)}
+      - {name: GJAHR, data_type: NUMC, length: 4, is_pk: true, description: Material document year}
+      - {name: BELNR, data_type: CHAR, length: 10, is_pk: true, description: Number of material document}
+      - {name: BUZEI, data_type: NUMC, length: 4, is_pk: true, description: Item in material document}
+      - {name: BEWTP, data_type: CHAR, length: 1, description: PO history category}
+      - {name: BUDAT, data_type: DATS, length: 8, description: Posting date in the document, business_name: GR Posting Date}
+      - {name: MENGE, data_type: QUAN, length: 13, decimals: 3, description: Quantity, business_name: GR Quantity}
+      - {name: DMBTR, data_type: CURR, length: 13, decimals: 2, description: Amount in local currency}
+  - name: MKPF
+    description: Header - material document
+    module: MM
+    table_class: transaction
+    business_entity: Material Document
+    change_tracking: {columns: [CPUDT, CPUTM], reliable: true, note: "Material documents are insert-only; CPUDT/CPUTM (entry date/time) is a reliable append watermark. Reversals are new documents."}
+    delete_strategy: Insert-only (reversals post new documents). Append strategy is appropriate; archiving may remove old rows.
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: MBLNR, data_type: CHAR, length: 10, is_pk: true, description: Number of material document, business_name: Material Document}
+      - {name: MJAHR, data_type: NUMC, length: 4, is_pk: true, description: Material document year, business_name: Material Document Year}
+      - {name: VGART, data_type: CHAR, length: 2, description: Transaction/event type}
+      - {name: BLART, data_type: CHAR, length: 2, description: Document type}
+      - {name: BLDAT, data_type: DATS, length: 8, description: Document date in document}
+      - {name: BUDAT, data_type: DATS, length: 8, description: Posting date in the document, business_name: Posting Date}
+      - {name: CPUDT, data_type: DATS, length: 8, description: Day on which accounting document was entered}
+      - {name: CPUTM, data_type: TIMS, length: 6, description: Time of entry}
+      - {name: USNAM, data_type: CHAR, length: 12, description: User name}
+      - {name: XBLNR, data_type: CHAR, length: 16, description: Reference document number}
+  - name: MSEG
+    description: Document segment - material (material document items)
+    module: MM
+    table_class: transaction
+    business_entity: Material Document Item
+    delete_strategy: Insert-only via header MKPF.
+    columns:
+      - {name: MANDT, data_type: CLNT, length: 3, is_pk: true, description: Client}
+      - {name: MBLNR, data_type: CHAR, length: 10, is_pk: true, description: Number of material document}
+      - {name: MJAHR, data_type: NUMC, length: 4, is_pk: true, description: Material document year}
+      - {name: ZEILE, data_type: NUMC, length: 4, is_pk: true, description: Item in material document}
+      - {name: BWART, data_type: CHAR, length: 3, description: Movement type (inventory management), business_name: Movement Type}
+      - {name: MATNR, data_type: CHAR, length: 18, description: Material number}
+      - {name: WERKS, data_type: CHAR, length: 4, description: Plant, business_name: Movement Plant}
+      - {name: LGORT, data_type: CHAR, length: 4, description: Storage location}
+      - {name: CHARG, data_type: CHAR, length: 10, description: Batch number}
+      - {name: SHKZG, data_type: CHAR, length: 1, description: Debit/credit indicator (S/H)}
+      - {name: MENGE, data_type: QUAN, length: 13, decimals: 3, description: Quantity, business_name: Movement Quantity}
+      - {name: MEINS, data_type: UNIT, length: 3, description: Base unit of measure}
+      - {name: DMBTR, data_type: CURR, length: 13, decimals: 2, description: Amount in local currency, business_name: Movement Amount}
+      - {name: LIFNR, data_type: CHAR, length: 10, description: Vendor account number}
+      - {name: KUNNR, data_type: CHAR, length: 10, description: Account number of customer}
+      - {name: EBELN, data_type: CHAR, length: 10, description: Purchase order number}
+      - {name: EBELP, data_type: NUMC, length: 5, description: Item number of purchasing document}
+relationships:
+  # -------------------------------------------------------------- equipment
+  - {from_table: EQUI, to_table: EQKT, join_columns: [{from: MANDT, to: MANDT}, {from: EQUNR, to: EQUNR}], extra_condition: "{to}.SPRAS = '{lang}'", join_type: LEFT, cardinality: "1:N", relationship_type: text, description: Equipment short text per language, business_purpose: Adds the equipment description in the reporting language, confidence: 0.92}
+  - {from_table: EQUI, to_table: EQUZ, join_columns: [{from: MANDT, to: MANDT}, {from: EQUNR, to: EQUNR}], extra_condition: "{to}.DATBI = '99991231'", join_type: LEFT, cardinality: "1:N", relationship_type: master_detail, description: Time segments of equipment; current segment has DATBI = 99991231, business_purpose: Current planning plant / location assignment / superior equipment, confidence: 0.9}
+  - {from_table: EQUZ, to_table: ILOA, join_columns: [{from: MANDT, to: MANDT}, {from: ILOAN, to: ILOAN}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Location and account assignment of the equipment time segment, business_purpose: Maintenance plant, location, functional location, cost center, confidence: 0.9}
+  - {from_table: EQUI, to_table: EQBS, join_columns: [{from: MANDT, to: MANDT}, {from: EQUNR, to: EQUNR}], join_type: LEFT, cardinality: "1:1", relationship_type: one_to_one, description: Stock segment of a serialised equipment (exists only while the serial number is in stock), business_purpose: Current stock plant / storage location / batch for serial number lists (IQ09), confidence: 0.88}
+  - {from_table: EQUI, to_table: MARA, join_columns: [{from: MANDT, to: MANDT}, {from: MATNR, to: MATNR}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Serialised material of the equipment, business_purpose: Material attributes (type, group, unit), confidence: 0.92}
+  - {from_table: EQUI, to_table: T370T, join_columns: [{from: MANDT, to: MANDT}, {from: EQTYP, to: EQTYP}], extra_condition: "{to}.SPRAS = '{lang}'", join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Equipment category text, business_purpose: Readable equipment category, confidence: 0.75}
+  - {from_table: EQUI, to_table: JEST, join_columns: [{from: MANDT, to: MANDT}, {from: OBJNR, to: OBJNR}], join_type: LEFT, cardinality: "1:N", relationship_type: status, description: All status entries of the equipment object (one row per status), business_purpose: Deletion flag (I0076 DLFL) / inactive (I0320 INAC) / user statuses — aggregate before joining, confidence: 0.9}
+  - {from_table: JEST, to_table: TJ02T, join_columns: [{from: STAT, to: ISTAT}], extra_condition: "{to}.SPRAS = '{lang}'", join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Text of system status (user statuses E* are in TJ30T instead), business_purpose: Readable status, confidence: 0.85}
+  - {from_table: EQBS, to_table: T001W, join_columns: [{from: MANDT, to: MANDT}, {from: B_WERK, to: WERKS}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Stock plant of serial number, business_purpose: Plant name of where the serialised item is stocked, confidence: 0.88}
+  - {from_table: ILOA, to_table: T001W, join_columns: [{from: MANDT, to: MANDT}, {from: SWERK, to: WERKS}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Maintenance plant of technical object, business_purpose: Plant name of maintenance plant, confidence: 0.88}
+  - {from_table: EQUZ, to_table: T001W, join_columns: [{from: MANDT, to: MANDT}, {from: IWERK, to: WERKS}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Maintenance planning plant, business_purpose: Plant name of planning plant, confidence: 0.85}
+  # -------------------------------------------------------------- material
+  - {from_table: MARA, to_table: MAKT, join_columns: [{from: MANDT, to: MANDT}, {from: MATNR, to: MATNR}], extra_condition: "{to}.SPRAS = '{lang}'", join_type: LEFT, cardinality: "1:N", relationship_type: text, description: Material description per language, business_purpose: Material description, confidence: 0.95}
+  - {from_table: MARA, to_table: MARC, join_columns: [{from: MANDT, to: MANDT}, {from: MATNR, to: MATNR}], join_type: LEFT, cardinality: "1:N", relationship_type: master_detail, description: Plant-level material data, business_purpose: Plant-specific attributes (MRP, purchasing group, serial number profile), confidence: 0.95}
+  - {from_table: MARC, to_table: T001W, join_columns: [{from: MANDT, to: MANDT}, {from: WERKS, to: WERKS}], join_type: INNER, is_mandatory: true, cardinality: "N:1", relationship_type: lookup, description: Plant of material plant view, business_purpose: Plant name, confidence: 0.95}
+  # -------------------------------------------------------------- SD
+  - {from_table: VBAK, to_table: VBAP, join_columns: [{from: MANDT, to: MANDT}, {from: VBELN, to: VBELN}], join_type: INNER, is_mandatory: true, cardinality: "1:N", relationship_type: header_item, description: Sales order header to items, business_purpose: Item-level order lines, confidence: 0.97}
+  - {from_table: VBAK, to_table: KNA1, join_columns: [{from: MANDT, to: MANDT}, {from: KUNNR, to: KUNNR}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Sold-to party, business_purpose: Customer attributes, confidence: 0.95}
+  - {from_table: VBAP, to_table: MARA, join_columns: [{from: MANDT, to: MANDT}, {from: MATNR, to: MATNR}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Material on the order item, business_purpose: Material attributes, confidence: 0.95}
+  - {from_table: LIKP, to_table: LIPS, join_columns: [{from: MANDT, to: MANDT}, {from: VBELN, to: VBELN}], join_type: INNER, is_mandatory: true, cardinality: "1:N", relationship_type: header_item, description: Delivery header to items, business_purpose: Delivery lines, confidence: 0.97}
+  - {from_table: LIKP, to_table: KNA1, join_columns: [{from: MANDT, to: MANDT}, {from: KUNNR, to: KUNNR}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Ship-to party of the delivery, business_purpose: Ship-to customer attributes, confidence: 0.93}
+  - {from_table: LIPS, to_table: VBAP, join_columns: [{from: MANDT, to: MANDT}, {from: VGBEL, to: VBELN}, {from: VGPOS, to: POSNR}], join_type: LEFT, cardinality: "N:1", relationship_type: reference, description: Delivery item references the preceding sales order item (VGBEL/VGPOS), business_purpose: Order-to-delivery link at item level. Valid when the delivery was created with reference to a sales order (VGTYP = 'C'), confidence: 0.88}
+  - {from_table: VBAP, to_table: VBFA, join_columns: [{from: MANDT, to: MANDT}, {from: VBELN, to: VBELV}, {from: POSNR, to: POSNV}], join_type: LEFT, cardinality: "1:N", relationship_type: document_flow, description: Subsequent documents of an order item, business_purpose: Order → delivery / invoice flow, confidence: 0.9}
+  - {from_table: VBFA, to_table: LIPS, join_columns: [{from: MANDT, to: MANDT}, {from: VBELN, to: VBELN}, {from: POSNN, to: POSNR}], extra_condition: "{from}.VBTYP_N = 'J'", join_type: LEFT, cardinality: "N:1", relationship_type: document_flow, description: Document flow entries whose subsequent document is a delivery (VBTYP_N = J), business_purpose: Order → delivery via document flow, confidence: 0.88}
+  - {from_table: LIPS, to_table: MARA, join_columns: [{from: MANDT, to: MANDT}, {from: MATNR, to: MATNR}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Material on delivery item, business_purpose: Material attributes, confidence: 0.95}
+  - {from_table: LIPS, to_table: T001W, join_columns: [{from: MANDT, to: MANDT}, {from: WERKS, to: WERKS}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Shipping plant, business_purpose: Plant name, confidence: 0.93}
+  # -------------------------------------------------------------- MM purchasing / inventory
+  - {from_table: EKKO, to_table: EKPO, join_columns: [{from: MANDT, to: MANDT}, {from: EBELN, to: EBELN}], join_type: INNER, is_mandatory: true, cardinality: "1:N", relationship_type: header_item, description: Purchase order header to items, business_purpose: PO lines, confidence: 0.97}
+  - {from_table: EKKO, to_table: LFA1, join_columns: [{from: MANDT, to: MANDT}, {from: LIFNR, to: LIFNR}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Vendor of the purchase order, business_purpose: Vendor attributes, confidence: 0.95}
+  - {from_table: EKPO, to_table: EKBE, join_columns: [{from: MANDT, to: MANDT}, {from: EBELN, to: EBELN}, {from: EBELP, to: EBELP}], join_type: LEFT, cardinality: "1:N", relationship_type: document_flow, description: Purchase order history (GR/IR events) per item, business_purpose: Goods receipt and invoice history; filter VGABE = '1' for goods receipts, confidence: 0.93}
+  - {from_table: EKPO, to_table: MARA, join_columns: [{from: MANDT, to: MANDT}, {from: MATNR, to: MATNR}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Material of PO item (blank for text items), business_purpose: Material attributes, confidence: 0.95}
+  - {from_table: EKPO, to_table: T001W, join_columns: [{from: MANDT, to: MANDT}, {from: WERKS, to: WERKS}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Receiving plant, business_purpose: Plant name, confidence: 0.93}
+  - {from_table: MKPF, to_table: MSEG, join_columns: [{from: MANDT, to: MANDT}, {from: MBLNR, to: MBLNR}, {from: MJAHR, to: MJAHR}], join_type: INNER, is_mandatory: true, cardinality: "1:N", relationship_type: header_item, description: Material document header to items, business_purpose: Goods movement lines, confidence: 0.97}
+  - {from_table: MSEG, to_table: EKPO, join_columns: [{from: MANDT, to: MANDT}, {from: EBELN, to: EBELN}, {from: EBELP, to: EBELP}], join_type: LEFT, cardinality: "N:1", relationship_type: reference, description: Goods movement referencing a purchase order item (GR for PO), business_purpose: PO-to-receipt link, confidence: 0.9}
+  - {from_table: MSEG, to_table: MARA, join_columns: [{from: MANDT, to: MANDT}, {from: MATNR, to: MATNR}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Material moved, business_purpose: Material attributes, confidence: 0.95}
+  - {from_table: MSEG, to_table: T001W, join_columns: [{from: MANDT, to: MANDT}, {from: WERKS, to: WERKS}], join_type: LEFT, cardinality: "N:1", relationship_type: lookup, description: Plant of goods movement, business_purpose: Plant name, confidence: 0.93}
+transactions:
+  - code: IQ09
+    name: Display Material Serial Numbers (list)
+    module: PM
+    process: Equipment and Serial Number Management
+    transaction_type: tcode
+    business_object: Serial number (equipment record with material + serial number)
+    description: Multi-selection list of material serial numbers. Each serial number is stored as an equipment master record (EQUI with MATNR + SERNR); stock location comes from the serial number stock segment (EQBS).
+    business_purpose: Find where serialised items are, which material they belong to, their category, manufacturer and status.
+    business_logic: "A serial number = EQUI row with MATNR and SERNR populated. Current stock location = EQBS (absent once the item leaves stock). Descriptions come from EQKT (equipment) and MAKT (material) in the logon language. Current installation/location data = EQUZ row with DATBI = '99991231' plus ILOA. Deletion/inactive state = JEST system statuses I0076 (DLFL) / I0320 (INAC)."
+    app_components: {note: "List report on equipment/serial number master. Report program name and any CDS views must be confirmed in SE93 / SE11 on your system — not asserted here.", business_object: "EQUI (equipment) / serial number"}
+    root_table: EQUI
+    default_columns: [EQUI.EQUNR, EQUI.SERNR, EQUI.MATNR, MAKT.MAKTX, EQBS.B_WERK, T001W.NAME1, EQBS.B_LAGER, EQUI.EQTYP, T370T.TYPTX, EQUI.HERST, EQUI.TYPBZ, EQKT.EQKTX, EQUI.ERDAT, EQUI.AEDAT]
+    tables:
+      - {table: EQUI, role: primary}
+      - {table: EQKT, role: text}
+      - {table: EQBS, role: secondary, notes: Stock segment for serial numbers in stock}
+      - {table: MARA, role: lookup}
+      - {table: MAKT, role: text}
+      - {table: T370T, role: text}
+      - {table: T001W, role: lookup}
+      - {table: EQUZ, role: secondary, notes: Optional - installation / planning data}
+      - {table: ILOA, role: secondary, notes: Optional - location / maintenance plant}
+      - {table: JEST, role: status, notes: Status - aggregate, do not join row-level}
+  - code: IQ03
+    name: Display Material Serial Number
+    module: PM
+    process: Equipment and Serial Number Management
+    business_object: Serial number
+    description: Single serial number display (material + serial number).
+    business_purpose: Inspect one serialised item.
+    root_table: EQUI
+    default_columns: [EQUI.EQUNR, EQUI.SERNR, EQUI.MATNR, MAKT.MAKTX, EQBS.B_WERK, EQBS.B_LAGER]
+    tables: [{table: EQUI, role: primary}, {table: EQBS, role: secondary}, {table: MARA, role: lookup}, {table: MAKT, role: text}]
+  - code: IE03
+    name: Display Equipment
+    module: PM
+    process: Equipment and Serial Number Management
+    business_object: Equipment
+    description: Display a single equipment master record including general, location, organisation and structure data.
+    business_purpose: Inspect equipment master data.
+    business_logic: General data from EQUI/EQKT; time-dependent structure & planning from current EQUZ segment; location & account assignment from ILOA.
+    root_table: EQUI
+    default_columns: [EQUI.EQUNR, EQKT.EQKTX, EQUI.EQTYP, EQUI.EQART, EQUI.HERST, EQUI.TYPBZ, EQUI.SERGE, EQUZ.IWERK, EQUZ.HEQUI, ILOA.SWERK, ILOA.STORT, ILOA.TPLNR, ILOA.KOSTL]
+    tables: [{table: EQUI, role: primary}, {table: EQKT, role: text}, {table: EQUZ, role: secondary}, {table: ILOA, role: secondary}, {table: T001W, role: lookup}, {table: JEST, role: status}]
+  - code: IH08
+    name: Display Equipment (list)
+    module: PM
+    process: Equipment and Serial Number Management
+    business_object: Equipment
+    description: Multi-level equipment list with selection on location, organisation and structure.
+    root_table: EQUI
+    default_columns: [EQUI.EQUNR, EQKT.EQKTX, EQUI.EQTYP, EQUZ.IWERK, ILOA.SWERK, ILOA.STORT, ILOA.TPLNR]
+    tables: [{table: EQUI, role: primary}, {table: EQKT, role: text}, {table: EQUZ, role: secondary}, {table: ILOA, role: secondary}]
+  - code: MM03
+    name: Display Material
+    module: MM
+    business_object: Material
+    description: Display material master views.
+    root_table: MARA
+    default_columns: [MARA.MATNR, MAKT.MAKTX, MARA.MTART, MARA.MATKL, MARA.MEINS, MARC.WERKS, MARC.DISPO]
+    tables: [{table: MARA, role: primary}, {table: MAKT, role: text}, {table: MARC, role: secondary}, {table: T001W, role: lookup}]
+  - code: VA03
+    name: Display Sales Order
+    module: SD
+    process: Order to Delivery
+    business_object: Sales order
+    description: Display a sales document (header, items, partners, document flow).
+    root_table: VBAP
+    default_columns: [VBAK.VBELN, VBAP.POSNR, VBAK.AUART, VBAK.ERDAT, VBAK.KUNNR, KNA1.NAME1, VBAP.MATNR, VBAP.ARKTX, VBAP.KWMENG, VBAP.NETWR, VBAK.WAERK]
+    tables: [{table: VBAK, role: primary}, {table: VBAP, role: secondary}, {table: KNA1, role: lookup}, {table: VBFA, role: secondary}]
+  - code: VL03N
+    name: Display Outbound Delivery
+    module: LE
+    process: Order to Delivery
+    business_object: Outbound delivery
+    description: Display delivery header and items, with reference to the preceding sales order.
+    root_table: LIPS
+    default_columns: [LIKP.VBELN, LIPS.POSNR, LIKP.LFART, LIKP.KUNNR, LIKP.WADAT_IST, LIPS.MATNR, LIPS.LFIMG, LIPS.WERKS, LIPS.VGBEL, LIPS.VGPOS]
+    tables: [{table: LIKP, role: primary}, {table: LIPS, role: secondary}, {table: VBAP, role: lookup}, {table: KNA1, role: lookup}]
+  - code: ME23N
+    name: Display Purchase Order
+    module: MM
+    process: Procure to Pay — Purchase Order to Goods Receipt
+    business_object: Purchase order
+    description: Display purchase order header, items and PO history.
+    root_table: EKPO
+    default_columns: [EKKO.EBELN, EKPO.EBELP, EKKO.BSART, EKKO.BEDAT, EKKO.LIFNR, LFA1.NAME1, EKPO.MATNR, EKPO.TXZ01, EKPO.MENGE, EKPO.NETPR, EKPO.WERKS]
+    tables: [{table: EKKO, role: primary}, {table: EKPO, role: secondary}, {table: LFA1, role: lookup}, {table: EKBE, role: secondary}]
+  - code: MB51
+    name: Material Document List
+    module: MM
+    process: Inventory Movements
+    business_object: Material document
+    description: List of material documents (goods movements) by material, plant, movement type.
+    root_table: MSEG
+    default_columns: [MKPF.MBLNR, MKPF.MJAHR, MSEG.ZEILE, MKPF.BUDAT, MSEG.BWART, MSEG.MATNR, MAKT.MAKTX, MSEG.WERKS, MSEG.LGORT, MSEG.MENGE, MSEG.MEINS, MSEG.DMBTR]
+    tables: [{table: MKPF, role: primary}, {table: MSEG, role: secondary}, {table: MARA, role: lookup}, {table: MAKT, role: text}]
+terms:
+  - {term: Equipment Number, synonyms: [equipment id, equipment, equnr, equipment no], table: EQUI, column: EQUNR, definition: Unique identifier of an equipment (technical object) master record}
+  - {term: Serial Number, synonyms: [serial no, serial, sernr, s/n], table: EQUI, column: SERNR, definition: Serial number of a serialised material; together with MATNR identifies one physical item}
+  - {term: Manufacturer, synonyms: [manufacturer name, make, oem, herst], table: EQUI, column: HERST, definition: Manufacturer of the asset as entered on the equipment}
+  - {term: Equipment Category, synonyms: [equipment type code, eqtyp], table: EQUI, column: EQTYP, definition: Equipment category key controlling equipment behaviour}
+  - {term: Equipment Category Description, synonyms: [equipment category text], table: T370T, column: TYPTX, lookup_logic: "T370T on EQTYP + SPRAS"}
+  - {term: Equipment Description, synonyms: [equipment text, equipment name], table: EQKT, column: EQKTX, lookup_logic: "EQKT on EQUNR + SPRAS"}
+  - {term: Material Description, synonyms: [material text, material name, product description], table: MAKT, column: MAKTX, lookup_logic: "MAKT on MATNR + SPRAS"}
+  - {term: Storage Location, synonyms: [sloc, storage loc], table: EQBS, column: B_LAGER}
+  - {term: Model Number, synonyms: [model, typbz], table: EQUI, column: TYPBZ}
+  - {term: Functional Location, synonyms: [floc, tplnr], table: ILOA, column: TPLNR}
+  - {term: Location, synonyms: [equipment location, stort], table: ILOA, column: STORT}
+  - {term: Maintenance Plant, synonyms: [mplant], table: ILOA, column: SWERK}
+  - {term: Plant Name, synonyms: [plant description], table: T001W, column: NAME1}
+  - {term: Customer Name, synonyms: [sold to name], table: KNA1, column: NAME1}
+  - {term: Vendor Name, synonyms: [supplier name], table: LFA1, column: NAME1}
+  - {term: Sales Order Number, synonyms: [sales order, so number, order number], table: VBAK, column: VBELN}
+  - {term: Delivery Number, synonyms: [outbound delivery, delivery], table: LIKP, column: VBELN}
+  - {term: Purchase Order Number, synonyms: [po number, po], table: EKKO, column: EBELN}
+use_cases:
+  - name: Equipment Master Data Model
+    domain: Equipment Management
+    description: Equipment details with serial number, material, plant, location, category, manufacturer and maintenance assignment.
+    keywords: [equipment, serial, serial number, manufacturer, equipment category, maintenance, location, plant, material, asset]
+    tables: [EQUI, EQKT, MARA, MAKT, T370T, EQBS]
+    optional_tables: [EQUZ, ILOA, T001W]
+    root_table: EQUI
+    grain: One row per equipment (EQUNR)
+  - name: Sales Order to Delivery
+    domain: Sales and Distribution
+    description: Sales order items with their outbound deliveries.
+    keywords: [sales order, order, delivery, shipment, customer, fulfilment, outbound]
+    tables: [VBAK, VBAP, LIPS, LIKP, KNA1]
+    optional_tables: [MARA, MAKT]
+    root_table: VBAP
+    grain: One row per sales order item and delivery item
+  - name: Purchase Order to Goods Receipt
+    domain: Procurement
+    description: Purchase order items with goods receipt history and vendor.
+    keywords: [purchase order, po, procurement, goods receipt, vendor, supplier, receiving]
+    tables: [EKKO, EKPO, LFA1, EKBE]
+    optional_tables: [MARA, MAKT, T001W]
+    root_table: EKPO
+    grain: One row per PO item and PO history record
+  - name: Inventory Movements
+    domain: Inventory Management
+    description: Goods movements by material, plant and movement type.
+    keywords: [inventory, goods movement, material document, stock, movement type]
+    tables: [MKPF, MSEG, MARA, MAKT]
+    optional_tables: [T001W]
+    root_table: MSEG
+    grain: One row per material document item

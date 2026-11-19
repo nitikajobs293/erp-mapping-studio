@@ -1,0 +1,24 @@
+# SAP NSAP — internal SAP instance. Its actual release, Z-tables and customising are NOT known to this
+# platform. The catalogue below is an ASSUMPTION copied from standard SAP ECC so that modellers can start;
+# every item is capped at 0.6 confidence and flagged "requires_validation" until a DDIC extract
+# (DD03L + DD05S) from NSAP is uploaded in Metadata Management, which upgrades matching items.
+extends: SAP_ECC
+erp:
+  code: SAP_NSAP
+  name: SAP NSAP (internal instance)
+  vendor: SAP
+  version_label: Unknown — confirm release (SAP_BASIS / S4CORE) in System > Status
+  category: ERP
+  description: Internal SAP instance. Standard-ECC structure assumed pending validation.
+  landscape_notes: "ASSUMPTION: structure equals standard SAP ECC 6.0. Verify release (ECC vs S/4HANA), MATNR length, custom Z-tables and append fields by uploading DD02L/DD03L/DD05S extracts."
+  extraction_method: To be confirmed (ODP / SLT / third-party replication)
+  default_language_key: E
+  has_client_column: true
+  client_column: MANDT
+defaults:
+  source_type: standard_erp_knowledge
+  confidence: 0.6
+  validation_status: requires_validation
+  source_reference: "Assumed from standard SAP ECC catalogue — NOT read from NSAP"
+confidence_cap: 0.6
+force_status: requires_validation
